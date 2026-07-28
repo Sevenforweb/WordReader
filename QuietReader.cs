@@ -55,6 +55,7 @@ namespace QuietReader
         readonly ToolTip ribbonTips = new ToolTip();
         readonly ContextMenuStrip styleMenu = new ContextMenuStrip();
         readonly List<Button> styleCards = new List<Button>();
+        readonly Dictionary<Control, float> ribbonBaseFontSizes = new Dictionary<Control, float>();
         readonly List<Panel> renderedPagePanels = new List<Panel>();
         readonly List<RichTextBox> renderedPageEditors = new List<RichTextBox>();
         Panel ribbonCommands;
@@ -85,6 +86,8 @@ namespace QuietReader
         Button minimizeButton;
         Button maximizeButton;
         Button closeButton;
+        bool windowMaximized;
+        Rectangle restoredWindowBounds;
         Button subscribeButton;
         Button styleUpButton;
         Button styleDownButton;
@@ -578,13 +581,13 @@ namespace QuietReader
             ribbonRoot.Controls.Add(ribbonCommands);
             ribbonCommands.BringToFront();
 
-            clipboardGroup = AddRibbonGroup(ribbonCommands, 0, 96, "剪贴板");
+            clipboardGroup = AddRibbonGroup(ribbonCommands, 0, 110, "剪贴板");
             hideButton = AddRibbonButton(clipboardGroup, 6, 4, 42, 49, delegate { ShowCommandPage(); }, false);
             hideButton.Font = new Font("Microsoft YaHei", 9F);
             hideButton.Text = "▣\n粘贴";
-            AddRibbonText(clipboardGroup, "✂ 剪切", 50, 4, 42, 16);
-            AddRibbonText(clipboardGroup, "▧ 复制", 50, 22, 42, 16);
-            AddRibbonText(clipboardGroup, "刷 格式", 50, 40, 42, 16);
+            AddRibbonText(clipboardGroup, "✂ 剪切", 50, 4, 56, 16);
+            AddRibbonText(clipboardGroup, "▧ 复制", 50, 22, 56, 16);
+            AddRibbonText(clipboardGroup, "刷 格式", 50, 40, 56, 16);
 
             fontGroup = AddRibbonGroup(ribbonCommands, 96, 280, "字体");
             AddRibbonText(fontGroup, "等线（中文正文）⌄", 6, 4, 126, 21, true);
@@ -605,13 +608,13 @@ namespace QuietReader
             AddRibbonText(fontGroup, "A", 222, 31, 25, 20);
             AddRibbonText(fontGroup, "清", 250, 31, 24, 20);
 
-            paragraphGroup = AddRibbonGroup(ribbonCommands, 376, 244, "段落");
+            paragraphGroup = AddRibbonGroup(ribbonCommands, 390, 258, "段落");
             backButton = AddRibbonButton(paragraphGroup, 5, 4, 28, 21, delegate { if (subscriptionPageActive) ReturnFromSubscriptionPage(); else NavigateBack(); }, false);
             forwardButton = AddRibbonButton(paragraphGroup, 34, 4, 28, 21, delegate { if (browser.CanGoForward) browser.GoForward(); }, false);
             refreshButton = AddRibbonButton(paragraphGroup, 63, 4, 28, 21, delegate { if (ready) browser.Reload(); }, false);
-            AddRibbonText(paragraphGroup, "• 列表⌄", 94, 4, 48, 21);
-            AddRibbonText(paragraphGroup, "1. 编号⌄", 143, 4, 58, 21);
-            AddRibbonText(paragraphGroup, "↔", 203, 4, 32, 21);
+            AddRibbonText(paragraphGroup, "• 列表⌄", 94, 4, 58, 21);
+            AddRibbonText(paragraphGroup, "1. 编号⌄", 153, 4, 68, 21);
+            AddRibbonText(paragraphGroup, "↔", 223, 4, 30, 21);
             AddRibbonText(paragraphGroup, "▤", 5, 31, 26, 20);
             AddRibbonText(paragraphGroup, "≡", 32, 31, 26, 20);
             AddRibbonText(paragraphGroup, "≣", 59, 31, 26, 20);
@@ -619,7 +622,7 @@ namespace QuietReader
             AddRibbonText(paragraphGroup, "⇤", 113, 31, 26, 20);
             AddRibbonText(paragraphGroup, "⇥", 140, 31, 26, 20);
             AddRibbonText(paragraphGroup, "↕", 167, 31, 26, 20);
-            AddRibbonText(paragraphGroup, "▦", 194, 31, 41, 20);
+            AddRibbonText(paragraphGroup, "▦", 194, 31, 59, 20);
 
             stylesGroup = AddRibbonGroup(ribbonCommands, 620, 500, "样式");
             stylesGallery = new FlowLayoutPanel
@@ -800,21 +803,33 @@ namespace QuietReader
 
         void ToggleMaximize()
         {
-            if (WindowState == FormWindowState.Maximized)
+            if (windowMaximized)
             {
-                WindowState = FormWindowState.Normal;
+                windowMaximized = false;
+                if (restoredWindowBounds.Width >= MinimumSize.Width && restoredWindowBounds.Height >= MinimumSize.Height)
+                    Bounds = restoredWindowBounds;
             }
             else
             {
-                MaximizedBounds = Screen.FromHandle(Handle).WorkingArea;
-                WindowState = FormWindowState.Maximized;
+                if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+                restoredWindowBounds = Bounds;
+                Rectangle workingArea = Screen.FromRectangle(Bounds).WorkingArea;
+                windowMaximized = true;
+                Bounds = workingArea;
             }
+            BringToFront();
+            Activate();
             UpdateWindowButtonGlyph();
         }
 
         void UpdateWindowButtonGlyph()
         {
             if (maximizeButton == null) return;
+            if (windowMaximized)
+            {
+                maximizeButton.Text = ((char)0x2750).ToString();
+                return;
+            }
             maximizeButton.Text = WindowState == FormWindowState.Maximized ? "❐" : "□";
         }
 
@@ -931,6 +946,53 @@ namespace QuietReader
             if (styleMoreButton != null) styleMoreButton.Left = stylesWidth - 27;
             LayoutStyleCards();
             LayoutRibbonCommandArea();
+            FitRibbonTextControls();
+        }
+
+        void FitRibbonTextControls()
+        {
+            if (ribbonRoot == null || ribbonRoot.IsDisposed) return;
+            FitRibbonTextControls(ribbonRoot);
+        }
+
+        void FitRibbonTextControls(Control parent)
+        {
+            foreach (Control control in parent.Controls)
+            {
+                if (control.Controls.Count > 0) FitRibbonTextControls(control);
+                if (!(control is Label) && !(control is Button)) continue;
+                if (String.IsNullOrWhiteSpace(control.Text) || control.ClientSize.Width <= 4 || control.ClientSize.Height <= 4) continue;
+                float baseSize;
+                if (!ribbonBaseFontSizes.TryGetValue(control, out baseSize))
+                {
+                    baseSize = control.Font.Size;
+                    ribbonBaseFontSizes[control] = baseSize;
+                }
+                float fittedSize = FindFittedFontSize(control, baseSize, Math.Min(6.5F, baseSize));
+                if (Math.Abs(control.Font.Size - fittedSize) > 0.05F)
+                    control.Font = new Font(control.Font.FontFamily, fittedSize, control.Font.Style, GraphicsUnit.Point);
+                if (control is Button) ((Button)control).UseCompatibleTextRendering = true;
+                string tip = control.Text.Replace("\r", " ").Replace("\n", " ").Trim();
+                if (String.IsNullOrWhiteSpace(ribbonTips.GetToolTip(control))) ribbonTips.SetToolTip(control, tip);
+            }
+        }
+
+        static float FindFittedFontSize(Control control, float maximum, float minimum)
+        {
+            int width = Math.Max(1, control.ClientSize.Width - control.Padding.Horizontal - 6);
+            int height = Math.Max(1, control.ClientSize.Height - control.Padding.Vertical - 4);
+            bool multiline = control.Text.IndexOf('\n') >= 0 || control.Text.IndexOf('\r') >= 0;
+            TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.TextBoxControl;
+            flags |= multiline ? TextFormatFlags.WordBreak : TextFormatFlags.SingleLine;
+            for (float size = maximum; size >= minimum; size -= 0.25F)
+            {
+                using (Font font = new Font(control.Font.FontFamily, size, control.Font.Style, GraphicsUnit.Point))
+                {
+                    Size measured = TextRenderer.MeasureText(control.Text, font, new Size(width, 1000), flags);
+                    if (measured.Width <= width && measured.Height <= height) return size;
+                }
+            }
+            return minimum;
         }
         void PopulateReadingSelectors()
         {
@@ -2177,6 +2239,7 @@ namespace QuietReader
             subscriptionCancelButton.Text = chinese ? "← 取消订阅并返回" : "← Cancel and return";
             typingScroll.Text = chinese ? "打字翻行" : "Typing scroll";
             shortcutHint.Text = chinese ? "F8 切换    F9 隐藏" : "F8 view    F9 hide";
+            FitRibbonTextControls();
             UpdateGuideText();
             PopulateReadingSelectors();
             decoy.Font = CreateDocumentFont();
@@ -4189,9 +4252,20 @@ namespace QuietReader
                 if (!IsPagedReadingView()) return;
                 int index = renderedPagePanels.Count - 1;
                 RichTextBox editor = renderedPageEditors[index];
-                pagedDocumentHost.ScrollControlIntoView(editor);
                 editor.SelectionStart = editor.TextLength;
-                editor.ScrollToCaret();
+                Point caret = editor.GetPositionFromCharIndex(Math.Max(0, editor.TextLength - 1));
+                Point caretInHost = pagedDocumentHost.PointToClient(editor.PointToScreen(caret));
+                int currentScrollY = Math.Max(0, -pagedDocumentHost.AutoScrollPosition.Y);
+                int caretDocumentY = currentScrollY + caretInHost.Y + Math.Max(editor.Font.Height, 1);
+                int visibleTop = currentScrollY;
+                int visibleBottom = visibleTop + pagedDocumentHost.ClientSize.Height;
+                int topComfort = visibleTop + Math.Max(24, pagedDocumentHost.ClientSize.Height / 5);
+                int bottomComfort = visibleBottom - Math.Max(36, pagedDocumentHost.ClientSize.Height / 4);
+                if (caretDocumentY < topComfort || caretDocumentY > bottomComfort)
+                {
+                    int targetScrollY = Math.Max(0, caretDocumentY - pagedDocumentHost.ClientSize.Height * 3 / 4);
+                    pagedDocumentHost.AutoScrollPosition = new Point(0, targetScrollY);
+                }
                 UpdateModeStatus();
             });
         }
@@ -4623,7 +4697,7 @@ namespace QuietReader
 
         protected override void WndProc(ref Message message)
         {
-            if (message.Msg == WmNcHitTest && WindowState == FormWindowState.Normal)
+            if (message.Msg == WmNcHitTest && WindowState == FormWindowState.Normal && !windowMaximized)
             {
                 base.WndProc(ref message);
                 if ((int)message.Result == 1)
