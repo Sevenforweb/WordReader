@@ -3,6 +3,10 @@
 > 想看小说不被一眼发现？市面上的摸鱼软件领导已经摸透了？请试试WordReader，一个面向 Windows 的 Word 风格正版阅读摸鱼辅助软件。登录、书架、目录、订阅与章节授权均由起点官方页面完成；正文仅对当前已授权、已显示的页面进行本地 OCR 识别。仅供学习交流使用，文字均为算法识别，无服务器数据爬取，禁止一切商用！
 
 <p align="center">
+  <a href="docs/USER_GUIDE.md"><strong>📖 点击查看完整图文新手教程</strong></a>
+</p>
+
+<p align="center">
   <img src="assets/posters/01-overview.png" alt="WordReader 总览海报" width="720">
 </p>
 
@@ -158,4 +162,5 @@ assets/posters/               宣传海报
 tools/generate-posters.ps1    海报生成脚本
 tools/generate-store-posters.ps1
                               应用商店与新增功能图生成脚本
+docs/USER_GUIDE.md            完整图文新手教程
 ```
