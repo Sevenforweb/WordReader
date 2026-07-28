@@ -27,6 +27,20 @@
 | --- | --- |
 | <img src="assets/screenshots/new-user-guide.png" alt="新手指引" width="600"> | <img src="assets/screenshots/style-gallery.png" alt="样式菜单" width="600"> |
 
+## 应用商店功能图
+
+<p align="center">
+  <img src="assets/store-posters/01-word-like-interface.png" alt="Word 风格界面" width="900">
+</p>
+
+| 本地 OCR 纯文字阅读 | 沉浸与滚动双模式 |
+| --- | --- |
+| <img src="assets/store-posters/02-local-ocr.png" alt="本地 OCR" width="600"> | <img src="assets/store-posters/03-dual-reading-modes.png" alt="双阅读模式" width="600"> |
+
+| 完整目录与阅读缓存 | 命令、样式与新手指引 |
+| --- | --- |
+| <img src="assets/store-posters/04-catalog-and-cache.png" alt="目录与缓存" width="600"> | <img src="assets/store-posters/05-commands-and-guide.png" alt="命令与指引" width="600"> |
+
 ## 快速开始
 
 ### 运行环境
@@ -112,4 +126,6 @@ ocr-helper/                   本地 OCR 辅助程序
 assets/screenshots/           README 实机截图
 assets/posters/               宣传海报
 tools/generate-posters.ps1    海报生成脚本
+tools/generate-store-posters.ps1
+                              应用商店功能图生成脚本
 ```
