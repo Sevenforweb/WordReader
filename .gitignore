@@ -1,0 +1,10 @@
+bin/
+packages/
+ocr-runtime/
+output/
+dist/
+ui-*.png
+*.user
+*.suo
+*.log
+*.tmp
