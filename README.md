@@ -3,7 +3,7 @@
 > 想看小说不被一眼发现？市面上的摸鱼软件领导已经摸透了？请试试WordReader，一个面向 Windows 的 Word 风格正版阅读摸鱼辅助软件。登录、书架、目录、订阅与章节授权均由起点官方页面完成；正文仅对当前已授权、已显示的页面进行本地 OCR 识别。仅供学习交流使用，文字均为算法识别，无服务器数据爬取，禁止一切商用！
 
 <p align="center">
-  <a href="docs/USER_GUIDE.md"><strong>📖 点击查看完整图文新手教程</strong></a>
+  <a href="docs/USER_GUIDE.md"><strong>可查看完整图文新手教程</strong></a>
 </p>
 
 <p align="center">
