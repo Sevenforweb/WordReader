@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
@@ -42,6 +43,7 @@ namespace QuietReader
         readonly Panel guidePaper = new Panel();
         readonly RichTextBox guideText = new RichTextBox();
         readonly Button guideBackButton = new Button();
+        readonly Button subscriptionCancelButton = new Button();
         readonly List<BookItem> bookshelf = new List<BookItem>();
         readonly List<BookItem> discoveryBooks = new List<BookItem>();
         readonly List<DiscoveryFilterGroup> discoveryFilterGroups = new List<DiscoveryFilterGroup>();
@@ -121,6 +123,9 @@ namespace QuietReader
         bool keepBrowserRunningBehindDocument;
         bool subscribingChapter;
         bool subscriptionAttemptPending;
+        bool subscriptionPageActive;
+        int subscriptionReturnChapterIndex = -1;
+        string subscriptionReturnUrl = String.Empty;
         bool guideBrowserWasVisible;
         Control guideReturnFocus;
         readonly bool showReaderStatusDetails = false;
@@ -272,6 +277,7 @@ namespace QuietReader
             public string Title { get; set; }
             public string Url { get; set; }
             public bool IsVip { get; set; }
+            public int ChapterNumber { get; set; }
         }
         sealed class CatalogProbe
         {
@@ -304,8 +310,12 @@ namespace QuietReader
             public bool CanSubscribe { get; set; }
             public bool IsLocked { get; set; }
             public bool HasReader { get; set; }
+            public bool IsLoggedIn { get; set; }
+            public bool LoginRequired { get; set; }
             public bool ConfirmVisible { get; set; }
-            public bool ConfirmClicked { get; set; }
+            public bool AutoSubscribeSelected { get; set; }
+            public bool BulkSubscribeVisible { get; set; }
+            public string ActionText { get; set; }
             public string Detail { get; set; }
             public string Error { get; set; }
         }
@@ -434,6 +444,16 @@ namespace QuietReader
             statusBar.Controls.Add(zoomControls);
             Controls.Add(statusBar);
             Controls.Add(ribbon);
+            subscriptionCancelButton.Size = new Size(196, 38);
+            subscriptionCancelButton.FlatStyle = FlatStyle.Flat;
+            subscriptionCancelButton.FlatAppearance.BorderSize = 0;
+            subscriptionCancelButton.BackColor = Color.FromArgb(192, 48, 38);
+            subscriptionCancelButton.ForeColor = Color.White;
+            subscriptionCancelButton.Font = new Font("Microsoft YaHei", 10F, FontStyle.Bold);
+            subscriptionCancelButton.Cursor = Cursors.Hand;
+            subscriptionCancelButton.Visible = false;
+            subscriptionCancelButton.Click += delegate { ReturnFromSubscriptionPage(); };
+            Controls.Add(subscriptionCancelButton);
             BuildGuideOverlay();
             decoy.Dock = DockStyle.None;
             decoy.BorderStyle = BorderStyle.None;
@@ -478,7 +498,7 @@ namespace QuietReader
             browser.Dock = DockStyle.Fill;
             browser.DefaultBackgroundColor = Color.White;
             browserHost.Controls.Add(browser);
-            Resize += delegate { ApplyLayout(); LayoutRibbonCommandArea(); LayoutGuideOverlay(); UpdateWindowButtonGlyph(); };
+            Resize += delegate { ApplyLayout(); LayoutRibbonCommandArea(); LayoutGuideOverlay(); LayoutSubscriptionCancelButton(); UpdateWindowButtonGlyph(); };
             page.Resize += delegate { ApplyLayout(); };
             workspace.Resize += delegate { ApplyLayout(); };
             workspace.Scroll += delegate { UpdateModeStatus(); };
@@ -586,7 +606,7 @@ namespace QuietReader
             AddRibbonText(fontGroup, "清", 250, 31, 24, 20);
 
             paragraphGroup = AddRibbonGroup(ribbonCommands, 376, 244, "段落");
-            backButton = AddRibbonButton(paragraphGroup, 5, 4, 28, 21, delegate { NavigateBack(); }, false);
+            backButton = AddRibbonButton(paragraphGroup, 5, 4, 28, 21, delegate { if (subscriptionPageActive) ReturnFromSubscriptionPage(); else NavigateBack(); }, false);
             forwardButton = AddRibbonButton(paragraphGroup, 34, 4, 28, 21, delegate { if (browser.CanGoForward) browser.GoForward(); }, false);
             refreshButton = AddRibbonButton(paragraphGroup, 63, 4, 28, 21, delegate { if (ready) browser.Reload(); }, false);
             AddRibbonText(paragraphGroup, "• 列表⌄", 94, 4, 48, 21);
@@ -1018,7 +1038,7 @@ namespace QuietReader
             if (currentPageKind == CommandPageKind.BookDetail) return chinese ? "输入 /阅读、/目录、/加入书架 或 /返回" : "Enter /read, /catalog, /add, or /back";
             if (currentPageKind == CommandPageKind.DiscoveryFilter) return chinese ? "输入筛选项序号；/结果 查看小说；/返回 回到上一级" : "Enter a filter number; /results shows books; /back returns";
             if (currentPageKind == CommandPageKind.Discovery) return chinese ? "N 下一张 A4；P 上一张；输入书籍序号查看详情" : "N next A4 page; P previous; enter a book number for details";
-            if (chapters.Count > 0) return chinese ? "输入章节序号阅读；/继续 按进度阅读；/目录 返回目录" : "Enter a chapter number; /resume uses saved progress; /catalog returns to the catalog";
+            if (chapters.Count > 0) return chinese ? "输入正文标题中的章号阅读；附加章节不占章号；/继续 按进度阅读" : "Enter the chapter number shown in the title; extras do not consume chapter numbers; /resume uses saved progress";
             if (bookshelf.Count > 0) return chinese ? "输入书籍序号继续；输入 / 查看命令；// 表示换行" : "Enter a book number; type / for commands; // inserts a line break";
             if (loginCompleted) return chinese ? "登录完成，请输入 /书架；输入 / 查看命令；// 表示换行" : "Login complete. Enter /bookshelf; type / for commands";
             return chinese ? "请输入 /登录；输入 / 查看命令；// 表示换行" : "Enter /login; type / for commands; // inserts a line break";
@@ -1193,7 +1213,8 @@ namespace QuietReader
             }
             else if (input == "/返回" || input.Equals("/back", StringComparison.OrdinalIgnoreCase))
             {
-                NavigateBack();
+                if (subscriptionPageActive || (mode == ReaderMode.Account && subscribingChapter)) ReturnFromSubscriptionPage();
+                else NavigateBack();
             }
             else if (input == "/下一章" || input.Equals("/next", StringComparison.OrdinalIgnoreCase))
             {
@@ -1356,6 +1377,8 @@ namespace QuietReader
             ocrReadingActive = false;
             ocrBusy = false;
             keepBrowserRunningBehindDocument = false;
+            subscribingChapter = false;
+            subscriptionPageActive = false;
             startReadingAfterCatalog = false;
             appendingDiscoveryPage = false;
             bookshelfTimer.Stop();
@@ -2013,8 +2036,18 @@ namespace QuietReader
 
         void OpenChapterWithHistory(int number)
         {
+            int chapterIndex = FindChapterByNumber(number);
+            if (chapterIndex < 0)
+            {
+                int maximum = chapters.Where(item => item.ChapterNumber > 0).Select(item => item.ChapterNumber).DefaultIfEmpty(0).Max();
+                bookshelfNotice = chinese
+                    ? "未找到第 " + number + " 章。当前目录最高正文章号为 " + maximum + "；感言、说明等附加章节不占章号。"
+                    : "Chapter " + number + " was not found. The highest numbered chapter is " + maximum + "; notes and announcements do not consume chapter numbers.";
+                SetCommandHint(CurrentCommandHint());
+                return;
+            }
             PushNavigationState();
-            OpenChapter(number);
+            OpenChapter(chapterIndex + 1);
         }
 
         void ShowHelp()
@@ -2141,6 +2174,7 @@ namespace QuietReader
             hideButton.Text = chinese ? "▣\n粘贴" : "▣\nPaste";
             languageButton.Text = chinese ? "EN" : "中";
             subscribeButton.Text = chinese ? "◆\n订阅本章" : "◆\nSubscribe";
+            subscriptionCancelButton.Text = chinese ? "← 取消订阅并返回" : "← Cancel and return";
             typingScroll.Text = chinese ? "打字翻行" : "Typing scroll";
             shortcutHint.Text = chinese ? "F8 切换    F9 隐藏" : "F8 view    F9 hide";
             UpdateGuideText();
@@ -3148,6 +3182,7 @@ namespace QuietReader
             foreach (ChapterItem item in probe.Items ?? new ChapterItem[0])
             {
                 item.Url = NormalizeChapterUrl(item.Url);
+                item.ChapterNumber = ExtractChapterNumber(item.Title);
                 chapters.Add(item);
             }
             string progressUrl = !String.IsNullOrWhiteSpace(probe.ProgressUrl) ? probe.ProgressUrl : selectedBook.ProgressUrl;
@@ -3181,15 +3216,100 @@ namespace QuietReader
         void RenderCatalog()
         {
             currentPageKind = CommandPageKind.Catalog;
-            decoy.Text = (chinese ? "《" + selectedBook.Title + "》目录（共 " + chapters.Count + " 章）\n\n" : selectedBook.Title + " - Catalog (" + chapters.Count + " chapters)\n\n");
+            int maximumChapterNumber = chapters.Where(item => item.ChapterNumber > 0).Select(item => item.ChapterNumber).DefaultIfEmpty(0).Max();
+            int extraCount = chapters.Count(item => item.ChapterNumber <= 0);
+            decoy.Text = chinese
+                ? "《" + selectedBook.Title + "》目录（" + maximumChapterNumber + " 个正文章号" + (extraCount > 0 ? "，另有 " + extraCount + " 个附加章节" : String.Empty) + "）\n\n"
+                : selectedBook.Title + " - Catalog (" + maximumChapterNumber + " numbered chapters" + (extraCount > 0 ? ", plus " + extraCount + " extras" : String.Empty) + ")\n\n";
             for (int index = 0; index < chapters.Count; index++)
             {
                 ChapterItem chapter = chapters[index];
                 string progress = index == currentChapterIndex ? (chinese ? "  [上次进度]" : "  [saved progress]") : String.Empty;
                 string vip = chapter.IsVip ? "  [VIP]" : String.Empty;
-                decoy.AppendText((index + 1) + ". " + chapter.Title + vip + progress + Environment.NewLine);
+                string selection = chapter.ChapterNumber > 0 ? chapter.ChapterNumber + ". " : (chinese ? "— [附加章节] " : "— [Extra] ");
+                decoy.AppendText(selection + chapter.Title + vip + progress + Environment.NewLine);
             }
-            decoy.AppendText(chinese ? "\n输入章节序号阅读，或输入 /继续。" : "\nEnter a chapter number, or use /resume.");
+            decoy.AppendText(chinese ? "\n请输入标题中的正文章号阅读，例如输入 197 打开“第197章”。附加章节不占数字。" : "\nEnter the number shown in a chapter title; for example, 197 opens Chapter 197. Extras do not consume numbers.");
+        }
+
+        int FindChapterByNumber(int chapterNumber)
+        {
+            if (chapterNumber < 1) return -1;
+            for (int index = 0; index < chapters.Count; index++)
+            {
+                if (chapters[index].ChapterNumber == chapterNumber) return index;
+            }
+            return -1;
+        }
+
+        static int ExtractChapterNumber(string title)
+        {
+            Match match = Regex.Match(title ?? String.Empty, @"^第\s*([0-9０-９零〇一二两三四五六七八九十百千万]+)\s*章");
+            if (!match.Success) return 0;
+            string value = match.Groups[1].Value;
+            StringBuilder digits = new StringBuilder(value.Length);
+            bool numeric = true;
+            foreach (char character in value)
+            {
+                if (character >= '0' && character <= '9') digits.Append(character);
+                else if (character >= '０' && character <= '９') digits.Append((char)('0' + character - '０'));
+                else
+                {
+                    numeric = false;
+                    break;
+                }
+            }
+            int parsed;
+            if (numeric && Int32.TryParse(digits.ToString(), out parsed)) return parsed;
+            return ParseChineseChapterNumber(value);
+        }
+
+        static int ParseChineseChapterNumber(string value)
+        {
+            int total = 0;
+            int section = 0;
+            int digit = 0;
+            foreach (char character in value)
+            {
+                int number = ChineseDigit(character);
+                if (number >= 0)
+                {
+                    digit = number;
+                    continue;
+                }
+                int unit = ChineseUnit(character);
+                if (unit == 0) return 0;
+                if (unit == 10000)
+                {
+                    section += digit;
+                    total += Math.Max(1, section) * unit;
+                    section = 0;
+                    digit = 0;
+                }
+                else
+                {
+                    section += Math.Max(1, digit) * unit;
+                    digit = 0;
+                }
+            }
+            return total + section + digit;
+        }
+
+        static int ChineseDigit(char character)
+        {
+            const string digits = "零一二三四五六七八九";
+            if (character == '〇') return 0;
+            if (character == '两') return 2;
+            return digits.IndexOf(character);
+        }
+
+        static int ChineseUnit(char character)
+        {
+            if (character == '十') return 10;
+            if (character == '百') return 100;
+            if (character == '千') return 1000;
+            if (character == '万') return 10000;
+            return 0;
         }
 
         int FindChapterIndex(string url)
@@ -3388,17 +3508,20 @@ namespace QuietReader
             }
 
             subscribingChapter = true;
+            subscriptionReturnChapterIndex = currentChapterIndex;
+            subscriptionReturnUrl = chapters[currentChapterIndex].Url ?? String.Empty;
             keepBrowserRunningBehindDocument = true;
             if (mode == ReaderMode.Hidden) ApplyLayout();
             SetCommandHint(CurrentCommandHint());
             try
             {
                 string inspectScript = "(function(){" +
-                    "const visible=e=>!!e&&e.offsetParent!==null;const text=e=>(e&&(e.innerText||e.textContent)||'').trim().replace(/\\s+/g,' ');" +
-                    "const controls=Array.from(document.querySelectorAll('button,a,[role=button]'));const target=controls.find(e=>visible(e)&&/^(订阅本章|购买本章|立即订阅)$/.test(text(e)));" +
+                    "const visible=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0;};const text=e=>(e&&(e.innerText||e.textContent)||'').trim().replace(/\\s+/g,' ');" +
+                    "const controls=Array.from(document.querySelectorAll('button,a,[role=button]'));const target=document.querySelector('.j_subscribeBtn[data-soa=\"0\"],[data-eid=\"qd_R113\"]')||controls.find(e=>visible(e)&&/^(订阅本章|购买本章|解锁本章)$/.test(text(e)));const bulk=document.querySelector('.j_subscribeBtn[data-soa=\"1\"],[data-eid=\"qd_R112\"]')||controls.find(e=>visible(e)&&/^(全部订阅|批量订阅)$/.test(text(e)));" +
                     "const reader=document.querySelector('.j_readContent')||document.querySelector('#reader-content')||document.querySelector('#reader');const readerText=reader?(reader.innerText||''):'';const body=document.body?(document.body.innerText||''):'';" +
-                    "const locked=/订阅本章|购买本章|本章为VIP/.test(body)&&readerText.length<500;const lines=(target?(target.closest('section,div,li')||document.body).innerText:body).split(/\\n+/).map(x=>x.trim()).filter(x=>x&&/本章|价格|起点币|余额|订阅/.test(x)).slice(0,8);" +
-                    "return JSON.stringify({CanSubscribe:!!target,IsLocked:locked,HasReader:readerText.length>500,ConfirmVisible:false,ConfirmClicked:false,Detail:lines.join('；').slice(0,360),Error:''});})()";
+                    "const page=window.g_data&&g_data.pageJson||{};const chapter=window.g_data&&g_data.chapter||{};const loginKnown=page.isLogin!==undefined;const loggedIn=loginKnown?Number(page.isLogin)===1:!document.querySelector('#pin-login,.sign-out:not(.hidden)');" +
+                    "const locked=Number(chapter.isBuy)===0||((!!document.querySelector('.vip-limit-wrap,.no-subscribe-btn-box')||/订阅本章|购买本章|本章为VIP/.test(body))&&readerText.length<500);const autoBox=document.querySelector('#j_autoSubscribe');const detail=text(target).slice(0,240);" +
+                    "return JSON.stringify({CanSubscribe:!!target,IsLocked:locked,HasReader:readerText.length>500,IsLoggedIn:loggedIn,LoginRequired:!loggedIn,ConfirmVisible:false,AutoSubscribeSelected:!!(autoBox&&autoBox.checked),BulkSubscribeVisible:!!bulk,ActionText:text(target),Detail:detail,Error:''});})()";
                 SubscriptionProbe probe = await ExecuteSubscriptionProbe(inspectScript);
                 if (probe == null)
                 {
@@ -3410,9 +3533,18 @@ namespace QuietReader
                     FailSubscription(chinese ? "本章已经拥有阅读权限，无需重复订阅" : "This chapter is already available and does not need another purchase");
                     return;
                 }
+                if (!probe.IsLoggedIn || probe.LoginRequired)
+                {
+                    ShowOfficialSubscriptionPage(chinese
+                        ? "当前起点账号未登录或登录已失效。请在官方页面登录，返回本章后再次输入 /订阅。"
+                        : "The Qidian account is signed out or the session expired. Sign in on the official page, return to this chapter, and enter /subscribe again.");
+                    return;
+                }
                 if (!probe.CanSubscribe)
                 {
-                    FailSubscription(chinese ? "官方页面未提供可用的“订阅本章”按钮，可能需要重新登录或完成安全校验" : "The official Subscribe chapter button is unavailable. Sign in again or complete the official security check");
+                    ShowOfficialSubscriptionPage(chinese
+                        ? "未能自动定位官方订阅入口，已显示章节网页。请完成页面提示或安全验证后再次输入 /订阅。"
+                        : "The official subscription entry could not be located automatically. Complete any page prompt or security check, then enter /subscribe again.");
                     return;
                 }
 
@@ -3420,9 +3552,9 @@ namespace QuietReader
                 string detail = String.IsNullOrWhiteSpace(probe.Detail) ? (chinese ? "价格与余额以起点官方页面最终显示为准" : "The official Qidian page determines the final price and balance") : probe.Detail;
                 DialogResult confirmation = MessageBox.Show(
                     chinese
-                        ? "将使用起点账户余额购买当前单章。\n\n章节：" + chapterTitle + "\n官方页面信息：" + detail + "\n\n只购买本章，不启用自动订阅，也不会自动充值。是否继续？"
-                        : "This will use the Qidian account balance to purchase one chapter.\n\nChapter: " + chapterTitle + "\nOfficial page: " + detail + "\n\nOnly this chapter will be purchased. Auto-subscribe and automatic recharge remain disabled. Continue?",
-                    chinese ? "确认订阅本章" : "Confirm chapter subscription",
+                        ? "即将打开起点官方的“订阅本章”界面。\n\n章节：" + chapterTitle + "\n单章信息：" + detail + "\n\n官方页面同时可能提供“全部订阅”，程序只会点击 data-soa=0 的单章按钮，绝不会点击“全部订阅”。最终支付仍需你亲自确认。是否继续？"
+                        : "The official Subscribe this chapter interface will open.\n\nChapter: " + chapterTitle + "\nSingle-chapter details: " + detail + "\n\nQidian may also show Subscribe all. The app only activates the data-soa=0 single-chapter button and never Subscribe all. You must still confirm final payment yourself. Continue?",
+                    chinese ? "打开官方订阅确认" : "Open official subscription confirmation",
                     MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
                 if (confirmation != DialogResult.Yes)
                 {
@@ -3430,26 +3562,34 @@ namespace QuietReader
                     return;
                 }
 
-                string clickScript = "(function(){const visible=e=>!!e&&e.offsetParent!==null;const text=e=>(e&&(e.innerText||e.textContent)||'').trim().replace(/\\s+/g,' ');const target=Array.from(document.querySelectorAll('button,a,[role=button]')).find(e=>visible(e)&&/^(订阅本章|购买本章|立即订阅)$/.test(text(e)));if(!target)return false;target.scrollIntoView({block:'center'});target.click();return true;})()";
+                string clickScript = "(function(){const text=e=>(e&&(e.innerText||e.textContent)||'').trim().replace(/\\s+/g,' ');const controls=Array.from(document.querySelectorAll('button,a,[role=button]'));const target=document.querySelector('.j_subscribeBtn[data-soa=\"0\"],[data-eid=\"qd_R113\"]')||controls.find(e=>/^(订阅本章|购买本章|解锁本章)$/.test(text(e)));if(!target||target.getAttribute('data-soa')==='1'||/全部订阅|批量订阅/.test(text(target)))return false;const autoBox=document.querySelector('#j_autoSubscribe');if(autoBox&&autoBox.checked)autoBox.click();const guideClose=document.querySelector('.global-panel-close');if(guideClose)guideClose.click();target.scrollIntoView({block:'center'});target.click();return true;})()";
                 string clickEncoded = await browser.ExecuteScriptAsync(clickScript);
                 JavaScriptSerializer serializer = new JavaScriptSerializer();
                 bool clicked = serializer.Deserialize<bool>(clickEncoded);
                 if (!clicked)
                 {
-                    FailSubscription(chinese ? "官方订阅按钮点击失败" : "The official subscription button could not be activated");
+                    ShowOfficialSubscriptionPage(chinese ? "官方订阅入口未能自动打开，请在网页中手动点击“订阅本章”" : "The official subscription entry could not be opened automatically. Click Subscribe chapter on the web page.");
                     return;
                 }
 
-                for (int attempt = 0; attempt < 24; attempt++)
+                keepBrowserRunningBehindDocument = false;
+                subscriptionPageActive = true;
+                bookshelfNotice = chinese
+                    ? "官方单章订阅界面已打开。请只确认“订阅本章”；输入 /返回 可随时取消并回到原章节。"
+                    : "The official single-chapter subscription interface is open. Confirm only Subscribe this chapter; enter /back anytime to return.";
+                SetMode(ReaderMode.Account);
+                SetCommandHint(CurrentCommandHint());
+
+                for (int attempt = 0; attempt < 180; attempt++)
                 {
-                    await Task.Delay(500);
+                    await Task.Delay(1000);
+                    if (!subscribingChapter || browser.CoreWebView2 == null || browser.Source == null) return;
                     string confirmationScript = "(function(){" +
-                        "const visible=e=>!!e&&e.offsetParent!==null;const text=e=>(e&&(e.innerText||e.textContent)||'').trim().replace(/\\s+/g,' ');" +
+                        "const visible=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0;};const text=e=>(e&&(e.innerText||e.textContent)||'').trim().replace(/\\s+/g,' ');" +
                         "const reader=document.querySelector('.j_readContent')||document.querySelector('#reader-content')||document.querySelector('#reader');const readerText=reader?(reader.innerText||''):'';const body=document.body?(document.body.innerText||''):'';" +
                         "const dialogs=Array.from(document.querySelectorAll('[role=dialog],.lbf-panel,[class*=dialog],[class*=popup],[class*=modal]')).filter(visible);const dialog=dialogs.find(e=>/订阅|起点币|余额|支付/.test(text(e)))||null;const dialogText=text(dialog);" +
-                        "const error=(dialogText.match(/余额不足|起点币不足|订阅失败|支付失败|请先登录|登录失效|安全验证[^。；\\n]*/)||[])[0]||'';let clicked=false;" +
-                        "if(dialog&&!error&&!window.__quietSubscriptionConfirmed){const confirm=Array.from(dialog.querySelectorAll('button,a,[role=button]')).find(e=>visible(e)&&/^(确认订阅|确认支付|立即订阅|订阅|确认)$/.test(text(e)));if(confirm){window.__quietSubscriptionConfirmed=true;confirm.click();clicked=true;}}" +
-                        "const locked=/订阅本章|购买本章|本章为VIP/.test(body)&&readerText.length<500;return JSON.stringify({CanSubscribe:false,IsLocked:locked,HasReader:readerText.length>500,ConfirmVisible:!!dialog,ConfirmClicked:clicked||!!window.__quietSubscriptionConfirmed,Detail:dialogText.slice(0,360),Error:error});})()";
+                        "const page=window.g_data&&g_data.pageJson||{};const chapter=window.g_data&&g_data.chapter||{};const loginKnown=page.isLogin!==undefined;const loggedIn=loginKnown?Number(page.isLogin)===1:!document.querySelector('#pin-login,.sign-out:not(.hidden)');const error=(dialogText.match(/余额不足|起点币不足|订阅失败|支付失败|请先登录|登录失效|安全验证[^。；\\n]*/)||[])[0]||'';" +
+                        "const locked=Number(chapter.isBuy)===0||((!!document.querySelector('.vip-limit-wrap,.no-subscribe-btn-box')||/订阅本章|购买本章|本章为VIP/.test(body))&&readerText.length<500);const autoBox=(dialog&&dialog.querySelector('input[type=checkbox]'))||document.querySelector('#j_autoSubscribe');const bulk=/全部订阅|批量订阅|订阅章节[：:]?\\s*共\\s*\\d+\\s*章/.test(dialogText);return JSON.stringify({CanSubscribe:false,IsLocked:locked,HasReader:readerText.length>500,IsLoggedIn:loggedIn,LoginRequired:!loggedIn,ConfirmVisible:!!dialog,AutoSubscribeSelected:!!(autoBox&&autoBox.checked),BulkSubscribeVisible:bulk,ActionText:'',Detail:dialogText.slice(0,360),Error:error});})()";
                     SubscriptionProbe result = await ExecuteSubscriptionProbe(confirmationScript);
                     if (result == null) continue;
                     if (!String.IsNullOrWhiteSpace(result.Error))
@@ -3460,20 +3600,25 @@ namespace QuietReader
                     if (result.HasReader && !result.IsLocked)
                     {
                         subscribingChapter = false;
+                        subscriptionPageActive = false;
                         bookshelfNotice = chinese ? "本章订阅成功，正在重新载入正文" : "Chapter subscribed. Reloading the text";
                         OpenChapter(currentChapterIndex + 1);
                         return;
                     }
-                    if (result.ConfirmClicked)
+                    if (result.LoginRequired)
                     {
-                        await Task.Delay(2500);
-                        subscriptionAttemptPending = true;
-                        subscribingChapter = false;
-                        OpenChapter(currentChapterIndex + 1);
+                        ShowOfficialSubscriptionPage(chinese ? "官方页面要求重新登录。登录并返回本章后，请再次输入 /订阅。" : "The official page requires sign-in. Sign in, return to the chapter, and enter /subscribe again.");
                         return;
                     }
+                    if (result.AutoSubscribeSelected)
+                        bookshelfNotice = chinese ? "请先取消官方界面中的“自动订阅”，再确认购买本章。" : "Clear Auto-subscribe in the official interface before confirming this chapter.";
+                    else if (result.BulkSubscribeVisible)
+                        bookshelfNotice = chinese ? "安全警告：当前官方弹窗显示了批量订阅范围，请不要确认。输入 /返回 后重新选择单章订阅。" : "Safety warning: the official dialog shows a bulk subscription range. Do not confirm it; enter /back and retry single-chapter subscription.";
+                    else if (result.ConfirmVisible)
+                        bookshelfNotice = chinese ? "请在官方弹窗核对价格并点击确认订阅；程序不会代替你点击支付。" : "Review the price and confirm in the official dialog; the app will not click payment for you.";
+                    SetCommandHint(CurrentCommandHint());
                 }
-                FailSubscription(chinese ? "订阅失败：未能读取官方确认结果，可能存在验证码或页面结构变化" : "Subscription failed: the official confirmation result was unavailable, possibly because of a security check or page change");
+                ShowOfficialSubscriptionPage(chinese ? "等待官方订阅结果超时。完成订阅后可输入 /继续 重新读取本章。" : "Timed out waiting for the official subscription result. Enter /resume after completing the purchase.");
             }
             catch (Exception exception)
             {
@@ -3484,6 +3629,45 @@ namespace QuietReader
                 subscribingChapter = false;
                 SetCommandHint(CurrentCommandHint());
             }
+        }
+
+        void ShowOfficialSubscriptionPage(string notice)
+        {
+            subscribingChapter = false;
+            subscriptionAttemptPending = false;
+            subscriptionPageActive = true;
+            keepBrowserRunningBehindDocument = false;
+            bookshelfNotice = notice;
+            SetMode(ReaderMode.Account);
+            SetCommandHint(CurrentCommandHint());
+        }
+
+        void ReturnFromSubscriptionPage()
+        {
+            subscribingChapter = false;
+            subscriptionAttemptPending = false;
+            subscriptionPageActive = false;
+            keepBrowserRunningBehindDocument = true;
+            bookshelfNotice = chinese ? "已退出订阅页面，正在返回原章节" : "Leaving the subscription page and returning to the chapter";
+            int chapterIndex = subscriptionReturnChapterIndex;
+            string chapterUrl = subscriptionReturnUrl;
+            subscriptionReturnChapterIndex = -1;
+            subscriptionReturnUrl = String.Empty;
+            if (chapterIndex >= 0 && chapterIndex < chapters.Count)
+            {
+                OpenChapter(chapterIndex + 1);
+                return;
+            }
+            if (!String.IsNullOrWhiteSpace(chapterUrl))
+            {
+                OpenChapterUrl(chapterUrl, Math.Max(0, currentChapterIndex));
+                return;
+            }
+            keepBrowserRunningBehindDocument = false;
+            SetMode(ReaderMode.Hidden);
+            ShowCommandPage();
+            decoy.Text = chinese ? "已退出订阅页面。" : "Subscription page closed.";
+            SetCommandHint(CurrentCommandHint());
         }
 
         async Task<SubscriptionProbe> ExecuteSubscriptionProbe(string script)
@@ -4210,6 +4394,13 @@ namespace QuietReader
         }
         void OnBrowserKeyDown(object sender, KeyEventArgs args)
         {
+            if (subscriptionPageActive && (args.KeyCode == Keys.Escape || args.KeyCode == Keys.F9))
+            {
+                args.Handled = true;
+                args.SuppressKeyPress = true;
+                ReturnFromSubscriptionPage();
+                return;
+            }
             if (mode != ReaderMode.Line || !readingActive) return;
             if (browser.Source == null || !IsQidianHost(browser.Source.Host)) return;
             if (Control.ModifierKeys == Keys.None && IsReadingKey(args.KeyCode))
@@ -4230,6 +4421,11 @@ namespace QuietReader
 
         protected override bool ProcessCmdKey(ref Message message, Keys keyData)
         {
+            if (subscriptionPageActive && (keyData == Keys.Escape || keyData == Keys.F9 || keyData == (Keys.Alt | Keys.Left)))
+            {
+                ReturnFromSubscriptionPage();
+                return true;
+            }
             if (guideOverlay.Visible)
             {
                 if (keyData == Keys.Escape || keyData == Keys.Back)
@@ -4363,6 +4559,7 @@ namespace QuietReader
         }
         void ApplyLayout()
         {
+            LayoutSubscriptionCancelButton();
             if (workspace.ClientSize.Width <= 0 || workspace.ClientSize.Height <= 0) return;
             Size pageSize = GetScaledPageSize();
             Padding margins = GetScaledPagePadding(pageSize);
@@ -4412,6 +4609,16 @@ namespace QuietReader
             decoy.Visible = false;
             browserHost.Bounds = new Rectangle(content.X, documentTop, content.Width, Math.Max(80, content.Bottom - documentTop));
             browserHost.BringToFront();
+        }
+
+        void LayoutSubscriptionCancelButton()
+        {
+            if (subscriptionCancelButton == null || subscriptionCancelButton.IsDisposed) return;
+            subscriptionCancelButton.Visible = subscriptionPageActive;
+            if (!subscriptionPageActive) return;
+            int top = ribbonRoot == null ? 12 : ribbonRoot.Bottom + 12;
+            subscriptionCancelButton.Location = new Point(Math.Max(12, ClientSize.Width - subscriptionCancelButton.Width - 20), top);
+            subscriptionCancelButton.BringToFront();
         }
 
         protected override void WndProc(ref Message message)
