@@ -19,16 +19,6 @@
 
 ## 界面预览
 
-| Word 风格主界面 | 连续 A4 滚动阅读 |
-| --- | --- |
-| <img src="assets/screenshots/main-interface.png" alt="主界面" width="600"> | <img src="assets/screenshots/scrolling-mode.png" alt="滚动模式" width="600"> |
-
-| 新手指引 | 样式与阅读操作 |
-| --- | --- |
-| <img src="assets/screenshots/new-user-guide.png" alt="新手指引" width="600"> | <img src="assets/screenshots/style-gallery.png" alt="样式菜单" width="600"> |
-
-## 应用商店功能图
-
 <p align="center">
   <img src="assets/store-posters/01-word-like-interface.png" alt="Word 风格界面" width="900">
 </p>
