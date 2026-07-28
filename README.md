@@ -10,8 +10,9 @@
 
 - **Word 风格伪装**：蓝色标题栏、功能区、样式库、A4 纸张、状态栏与缩放控件。
 - **打字展现正文内容**：让老板以为你在写文档！
-- **正版账号流程**：通过内嵌 WebView2 完成登录、书架、目录、阅读和单章余额订阅。
+- **正版账号与安全订阅**：通过内嵌 WebView2 完成登录、书架、目录和阅读；VIP 章节只打开官方单章订阅界面，并检查自动订阅与批量范围。
 - **命令行发现小说**：支持搜索、分类与排行榜，列表通过起点官方页面 DOM 读取。
+- **多页聚合与精确跳转**：自动聚合发现列表和长目录分页，显示序号始终对应实际书籍或章节链接。
 - **应用内导航栈**：可从详情、目录和阅读流程返回进入前的命令页面。
 - **自然段与页面去重**：依据官方页面段落位置合并 OCR 块，并处理相邻截图的重复内容与页边截断。
 - **双阅读模式**：沉浸模式逐步显示；滚动模式将已读文字排成连续 A4 页面，支持回看。
@@ -30,6 +31,20 @@
 | 完整目录与阅读缓存 | 命令、样式与新手指引 |
 | --- | --- |
 | <img src="assets/store-posters/04-catalog-and-cache.png" alt="目录与缓存" width="600"> | <img src="assets/store-posters/05-commands-and-guide.png" alt="命令与指引" width="600"> |
+
+## 新增功能展示
+
+<p align="center">
+  <img src="assets/store-posters/06-discovery-and-filters.png" alt="搜索分类排行与多级筛选" width="900">
+</p>
+
+| 精确章节导航 | 安全单章订阅 |
+| --- | --- |
+| <img src="assets/store-posters/07-precise-chapter-navigation.png" alt="精确章节导航" width="600"> | <img src="assets/store-posters/08-safe-subscription.png" alt="安全单章订阅" width="600"> |
+
+- 发现列表支持 `N` / `P` 快速切换下一页和上一页，也可继续使用 `/筛选`、`/排序` 与 `/结果`。
+- 进入书籍详情后可以查看完整信息、加入书架、打开目录或直接阅读；`/返回` 会恢复进入当前流程前的命令页面。
+- `/订阅` 只负责打开官方单章订阅入口。程序会提示自动订阅、批量订阅、登录失效或余额等异常，但不会代替用户点击支付。
 
 ## 快速开始
 
@@ -144,5 +159,5 @@ assets/screenshots/           README 实机截图
 assets/posters/               宣传海报
 tools/generate-posters.ps1    海报生成脚本
 tools/generate-store-posters.ps1
-                              应用商店功能图生成脚本
+                              应用商店与新增功能图生成脚本
 ```

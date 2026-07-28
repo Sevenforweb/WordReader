@@ -244,4 +244,133 @@ try {
     Save-Poster $bitmap '05-commands-and-guide.png'
 } finally { $graphics.Dispose(); $bitmap.Dispose() }
 
+# 06 - Discovery and filters
+$bitmap = New-Object System.Drawing.Bitmap $width, $height
+$graphics = New-Graphics $bitmap
+try {
+    $gradient = New-Object System.Drawing.Drawing2D.LinearGradientBrush ([System.Drawing.Point]::new(0, 0)), ([System.Drawing.Point]::new($width, $height)), ([System.Drawing.Color]::FromArgb(24, 53, 98)), ([System.Drawing.Color]::FromArgb(61, 116, 194))
+    try { $graphics.FillRectangle($gradient, 0, 0, $width, $height) } finally { $gradient.Dispose() }
+    Draw-Brand $graphics $white
+    $titleFont = New-Object System.Drawing.Font $fontBold, 38, ([System.Drawing.FontStyle]::Bold)
+    $subtitleFont = New-Object System.Drawing.Font $fontRegular, 23
+    try {
+        Draw-Text $graphics "搜索 / 分类 / 排行`n一条命令找新书" $titleFont $white ([System.Drawing.RectangleF]::new(76, 174, 500, 132))
+        Draw-Text $graphics '命令驱动的全站发现' $subtitleFont $white ([System.Drawing.RectangleF]::new(82, 345, 430, 44))
+    } finally { $titleFont.Dispose(); $subtitleFont.Dispose() }
+    Draw-Chip $graphics '多级筛选' 82 438 150 $brightBlue $white
+    Draw-Chip $graphics '排序方式' 248 438 150 $brightBlue $white
+    Draw-Chip $graphics '分页聚合' 82 502 150 $brightBlue $white
+    Draw-Chip $graphics '序号选择' 248 502 150 $brightBlue $white
+    Fill-RoundedRectangle $graphics $white ([System.Drawing.RectangleF]::new(620, 110, 900, 680)) 30
+    $paper = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(249, 251, 254))
+    $line = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(218, 228, 242)), 2
+    $commandFont = New-Object System.Drawing.Font 'Consolas', 22, ([System.Drawing.FontStyle]::Bold)
+    $listTitleFont = New-Object System.Drawing.Font $fontBold, 24, ([System.Drawing.FontStyle]::Bold)
+    $listTextFont = New-Object System.Drawing.Font $fontRegular, 18
+    try {
+        Fill-RoundedRectangle $graphics $paper ([System.Drawing.RectangleF]::new(650, 140, 840, 620)) 20
+        Fill-RoundedRectangle $graphics $softBlue ([System.Drawing.RectangleF]::new(690, 176, 740, 62)) 14
+        Draw-Text $graphics '/分类 玄幻  ·  /排序 人气' $commandFont $blue ([System.Drawing.RectangleF]::new(716, 181, 690, 50)) 'Near' 'Center'
+        Draw-Text $graphics '发现小说 · 当前第 2 页' $listTitleFont $ink ([System.Drawing.RectangleF]::new(692, 278, 690, 46))
+        $books = @(
+            @('01', '分类结果一', '连载 · 玄幻 · 最新章节已更新'),
+            @('02', '分类结果二', '完本 · 轻小说 · 可直接查看详情'),
+            @('03', '分类结果三', '连载 · 都市 · 支持加入书架'),
+            @('04', '分类结果四', '完本 · 科幻 · 输入序号进入详情')
+        )
+        for ($index = 0; $index -lt $books.Count; $index++) {
+            $y = 350 + $index * 88
+            $graphics.DrawLine($line, 692, $y + 76, 1440, $y + 76)
+            Fill-RoundedRectangle $graphics $blue ([System.Drawing.RectangleF]::new(694, $y + 4, 52, 52)) 14
+            Draw-Text $graphics $books[$index][0] $listTextFont $white ([System.Drawing.RectangleF]::new(694, $y + 4, 52, 52)) 'Center' 'Center'
+            Draw-Text $graphics $books[$index][1] $listTitleFont $ink ([System.Drawing.RectangleF]::new(772, $y, 500, 38))
+            Draw-Text $graphics $books[$index][2] $listTextFont $muted ([System.Drawing.RectangleF]::new(774, $y + 40, 630, 30))
+        }
+        Draw-Text $graphics 'N 下一页   P 上一页   /筛选   /结果' $commandFont $blue ([System.Drawing.RectangleF]::new(690, 704, 740, 36)) 'Center'
+    } finally { $paper.Dispose(); $line.Dispose(); $commandFont.Dispose(); $listTitleFont.Dispose(); $listTextFont.Dispose() }
+    Save-Poster $bitmap '06-discovery-and-filters.png'
+} finally { $graphics.Dispose(); $bitmap.Dispose() }
+
+# 07 - Precise chapter navigation
+$bitmap = New-Object System.Drawing.Bitmap $width, $height
+$graphics = New-Graphics $bitmap
+try {
+    $graphics.Clear([System.Drawing.Color]::FromArgb(244, 248, 254))
+    Draw-Brand $graphics $blue
+    $titleFont = New-Object System.Drawing.Font $fontBold, 48, ([System.Drawing.FontStyle]::Bold)
+    $subtitleFont = New-Object System.Drawing.Font $fontRegular, 22
+    try {
+        Draw-Text $graphics '选中第几章，就打开第几章' $titleFont $ink ([System.Drawing.RectangleF]::new(70, 132, 1460, 76)) 'Center'
+        Draw-Text $graphics '分页聚合后仍保持显示序号与真实章节一一对应' $subtitleFont $muted ([System.Drawing.RectangleF]::new(70, 215, 1460, 42)) 'Center'
+    } finally { $titleFont.Dispose(); $subtitleFont.Dispose() }
+    $flowTitles = @('发现列表', '书籍详情', '完整目录', '正版阅读')
+    $flowNotes = @('搜索 / 分类 / 排行', '简介与加入书架', '历史进度与 VIP 标记', '按键显示正文')
+    $flowColors = @($blue, $cyan, $orange, $green)
+    $flowTitleFont = New-Object System.Drawing.Font $fontBold, 24, ([System.Drawing.FontStyle]::Bold)
+    $flowNoteFont = New-Object System.Drawing.Font $fontRegular, 17
+    $arrowFont = New-Object System.Drawing.Font 'Segoe UI Symbol', 30, ([System.Drawing.FontStyle]::Bold)
+    try {
+        for ($index = 0; $index -lt 4; $index++) {
+            $x = 74 + $index * 382
+            Fill-RoundedRectangle $graphics $white ([System.Drawing.RectangleF]::new($x, 330, 318, 250)) 24
+            Fill-RoundedRectangle $graphics $flowColors[$index] ([System.Drawing.RectangleF]::new($x + 28, 360, 64, 64)) 18
+            Draw-Text $graphics ([string]($index + 1)) $flowTitleFont $white ([System.Drawing.RectangleF]::new($x + 28, 360, 64, 64)) 'Center' 'Center'
+            Draw-Text $graphics $flowTitles[$index] $flowTitleFont $ink ([System.Drawing.RectangleF]::new($x + 28, 454, 262, 42)) 'Center'
+            Draw-Text $graphics $flowNotes[$index] $flowNoteFont $muted ([System.Drawing.RectangleF]::new($x + 24, 514, 270, 34)) 'Center'
+            if ($index -lt 3) { Draw-Text $graphics '›' $arrowFont $blue ([System.Drawing.RectangleF]::new($x + 318, 414, 64, 70)) 'Center' 'Center' }
+        }
+    } finally { $flowTitleFont.Dispose(); $flowNoteFont.Dispose(); $arrowFont.Dispose() }
+    Fill-RoundedRectangle $graphics $softBlue ([System.Drawing.RectangleF]::new(150, 666, 1300, 118)) 24
+    $footerTitleFont = New-Object System.Drawing.Font $fontBold, 25, ([System.Drawing.FontStyle]::Bold)
+    $footerTextFont = New-Object System.Drawing.Font $fontRegular, 19
+    try {
+        Draw-Text $graphics '/返回' $footerTitleFont $blue ([System.Drawing.RectangleF]::new(190, 692, 150, 48)) 'Center'
+        Draw-Text $graphics '回到进入详情、目录或阅读前的命令页面，不丢失导航上下文' $footerTextFont $ink ([System.Drawing.RectangleF]::new(350, 692, 1010, 48)) 'Near' 'Center'
+        Draw-Text $graphics '完整长目录 · 精确序号映射 · 上次进度继续' $footerTextFont $muted ([System.Drawing.RectangleF]::new(190, 742, 1170, 34)) 'Center'
+    } finally { $footerTitleFont.Dispose(); $footerTextFont.Dispose() }
+    Save-Poster $bitmap '07-precise-chapter-navigation.png'
+} finally { $graphics.Dispose(); $bitmap.Dispose() }
+
+# 08 - Safe subscription
+$bitmap = New-Object System.Drawing.Bitmap $width, $height
+$graphics = New-Graphics $bitmap
+try {
+    $gradient = New-Object System.Drawing.Drawing2D.LinearGradientBrush ([System.Drawing.Point]::new(0, 0)), ([System.Drawing.Point]::new($width, 0)), ([System.Drawing.Color]::FromArgb(27, 56, 102)), ([System.Drawing.Color]::FromArgb(46, 94, 164))
+    try { $graphics.FillRectangle($gradient, 0, 0, $width, $height) } finally { $gradient.Dispose() }
+    Draw-Brand $graphics $white
+    $titleFont = New-Object System.Drawing.Font $fontBold, 49, ([System.Drawing.FontStyle]::Bold)
+    $subtitleFont = New-Object System.Drawing.Font $fontRegular, 22
+    try {
+        Draw-Text $graphics "VIP 章节`n安全单章订阅" $titleFont $white ([System.Drawing.RectangleF]::new(78, 170, 500, 148))
+        Draw-Text $graphics '始终由起点官方页面完成购买' $subtitleFont $white ([System.Drawing.RectangleF]::new(82, 342, 480, 44))
+    } finally { $titleFont.Dispose(); $subtitleFont.Dispose() }
+    Draw-Chip $graphics '余额支付' 82 438 150 $brightBlue $white
+    Draw-Chip $graphics '顶部提示' 248 438 150 $brightBlue $white
+    Draw-Chip $graphics '/返回取消' 82 502 176 $brightBlue $white
+    Draw-Chip $graphics '恢复原章节' 274 502 176 $brightBlue $white
+    Fill-RoundedRectangle $graphics $white ([System.Drawing.RectangleF]::new(650, 110, 870, 680)) 30
+    $safeTitleFont = New-Object System.Drawing.Font $fontBold, 28, ([System.Drawing.FontStyle]::Bold)
+    $safeItemFont = New-Object System.Drawing.Font $fontBold, 22, ([System.Drawing.FontStyle]::Bold)
+    $safeNoteFont = New-Object System.Drawing.Font $fontRegular, 18
+    try {
+        Draw-Text $graphics '订阅前安全检查' $safeTitleFont $ink ([System.Drawing.RectangleF]::new(710, 162, 750, 52)) 'Center'
+        $checks = @(
+            @('单章范围', '仅打开当前 VIP 章节的官方订阅入口', $blue),
+            @('自动订阅', '检测到勾选时要求先取消', $orange),
+            @('批量订阅', '发现多章范围时阻止继续确认', $cyan),
+            @('人工确认', '核对价格后由用户点击官方确认', $green)
+        )
+        for ($index = 0; $index -lt $checks.Count; $index++) {
+            $y = 242 + $index * 118
+            Fill-RoundedRectangle $graphics $pale ([System.Drawing.RectangleF]::new(700, $y, 770, 94)) 18
+            Fill-RoundedRectangle $graphics $checks[$index][2] ([System.Drawing.RectangleF]::new(724, $y + 19, 56, 56)) 16
+            Draw-Text $graphics '✓' $safeItemFont $white ([System.Drawing.RectangleF]::new(724, $y + 19, 56, 56)) 'Center' 'Center'
+            Draw-Text $graphics $checks[$index][0] $safeItemFont $ink ([System.Drawing.RectangleF]::new(810, $y + 12, 250, 38))
+            Draw-Text $graphics $checks[$index][1] $safeNoteFont $muted ([System.Drawing.RectangleF]::new(812, $y + 52, 610, 30))
+        }
+        Draw-Text $graphics '程序不会代替你点击支付' $safeItemFont $blue ([System.Drawing.RectangleF]::new(700, 724, 770, 38)) 'Center'
+    } finally { $safeTitleFont.Dispose(); $safeItemFont.Dispose(); $safeNoteFont.Dispose() }
+    Save-Poster $bitmap '08-safe-subscription.png'
+} finally { $graphics.Dispose(); $bitmap.Dispose() }
+
 $navy.Dispose(); $blue.Dispose(); $brightBlue.Dispose(); $cyan.Dispose(); $white.Dispose(); $ink.Dispose(); $muted.Dispose(); $pale.Dispose(); $softBlue.Dispose(); $green.Dispose(); $orange.Dispose()
