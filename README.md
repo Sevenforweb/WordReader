@@ -32,8 +32,6 @@
 | --- | --- |
 | <img src="assets/store-posters/04-catalog-and-cache.png" alt="目录与缓存" width="600"> | <img src="assets/store-posters/05-commands-and-guide.png" alt="命令与指引" width="600"> |
 
-## 新增功能展示
-
 <p align="center">
   <img src="assets/store-posters/06-discovery-and-filters.png" alt="搜索分类排行与多级筛选" width="900">
 </p>
