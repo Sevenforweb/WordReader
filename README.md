@@ -1,6 +1,6 @@
 # WordReader
 
-> 一个面向 Windows 的 Word 风格正版阅读客户端原型。登录、书架、目录、订阅与章节授权均由起点官方页面完成；正文仅对当前已授权、已显示的页面进行本地 OCR 识别。
+> 想看小说不被一眼发现？市面上的摸鱼软件领导已经摸透了？请试试WordReader，一个面向 Windows 的 Word 风格正版阅读摸鱼辅助软件。登录、书架、目录、订阅与章节授权均由起点官方页面完成；正文仅对当前已授权、已显示的页面进行本地 OCR 识别。仅供学习交流使用，文字均为算法识别，无服务器数据爬取，禁止一切商用！
 
 <p align="center">
   <img src="assets/posters/01-overview.png" alt="WordReader 总览海报" width="720">
@@ -26,7 +26,7 @@
   <img src="assets/store-posters/01-word-like-interface.png" alt="Word 风格界面" width="900">
 </p>
 
-| 本地 OCR 纯文字阅读 | 沉浸与滚动双模式 |
+| 伪装成Word纯文字阅读 | 沉浸与滚动双模式 |
 | --- | --- |
 | <img src="assets/store-posters/02-local-ocr.png" alt="本地 OCR" width="600"> | <img src="assets/store-posters/03-dual-reading-modes.png" alt="双阅读模式" width="600"> |
 
@@ -45,12 +45,12 @@
 
 ### 构建与启动
 
-新手可直接双击项目根目录中的：
+可直接双击项目根目录中的：
 
 ```text
 启动阅读器.cmd
 ```
-
+启动。
 启动文件会自动判断是否需要重新构建，然后打开阅读器；正常使用无需打开终端。
 
 开发者也可以继续使用 PowerShell：
@@ -111,6 +111,7 @@
 | `/滚动` / `/沉浸` | 切换阅读模式 |
 
 输入 `/` 可打开命令候选，方向键选择，`Tab` 补全。普通输入中的 `//` 表示换行。
+
 PS：`/沉浸` 是指单A4页面内部滚动，无法查看上下文；`/滚动` 支持类Word新页创建，可用滚轮看上下文。已知的bug：滚动时会少量鬼畜
 
 ## 技术说明
