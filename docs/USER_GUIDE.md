@@ -63,9 +63,23 @@
 ### 系统要求
 
 - Windows 10 或 Windows 11
-- Microsoft Edge WebView2 Runtime
 - PowerShell 5+
-- 从源码构建时需要 .NET Framework 4.6.2+
+- 不需要 Node.js、npm、npx、yarn 或 pnpm
+- WebView2 Runtime 会在启动时自动检查，缺失时使用微软官方 Evergreen 安装程序补齐
+- 完整便携包不要求系统安装 .NET 8 SDK
+- 只有从源码重新编译主程序时，才需要 Windows 10/11 SDK 和 .NET Framework 4.8 Developer Pack
+
+### 初始化程序会做什么
+
+双击 `启动阅读器.cmd` 后，`initialize.ps1` 会按顺序检查：
+
+1. **已有实例**：如果 WordReader 已经运行，启动器会激活现有窗口并跳过初始化和重新编译。
+2. **WebView2 Runtime**：检测到现有版本后直接跳过；缺失时下载官方安装器、验证微软数字签名并静默安装。
+3. **PP-OCRv6 Runtime**：检测 `OcrHelper.exe` 和三个模型文件；全部存在时直接跳过。
+4. **项目私有 .NET 8**：仅当源码目录需要重新构建 OCR 时，才下载到 `.tools\dotnet`，不会加入系统 PATH。
+5. **主程序文件**：`bin\QuietReader.exe` 不存在或源码较新时才重新编译。
+
+便携包中的依赖已经准备完整，因此正常情况下这些检查会在几秒内结束。
 
 ## 三、认识主界面
 

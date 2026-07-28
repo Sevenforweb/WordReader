@@ -28,8 +28,12 @@ $windowsMetadata = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\UnionMe
 $windowsRuntime = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.Runtime.WindowsRuntime.dll'
 $facadeDirectory = 'C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8\Facades'
 
+if (-not (Test-Path -LiteralPath $compiler)) {
+    throw 'The .NET Framework C# compiler was not found. Use the prebuilt portable release, or install the .NET Framework 4.8 developer pack.'
+}
+
 if (-not $windowsMetadata -or -not (Test-Path $windowsRuntime) -or -not (Test-Path $facadeDirectory)) {
-    throw 'Windows OCR build references were not found. Install the Windows 10/11 SDK and .NET Framework 4.8 developer pack.'
+    throw 'Source compilation requires the Windows 10/11 SDK and .NET Framework 4.8 developer pack. These large developer tools are not installed automatically. The prebuilt portable release does not require them.'
 }
 
 $facadeReferences = Get-ChildItem $facadeDirectory -Filter *.dll | ForEach-Object { '/reference:' + $_.FullName }

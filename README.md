@@ -53,9 +53,12 @@
 ### 运行环境
 
 - Windows 10 / 11
-- PowerShell 5+
-- .NET Framework 4.6.2+
-- Microsoft Edge WebView2 Runtime
+- PowerShell 5+（Windows 10/11 默认提供）
+- Microsoft Edge WebView2 Runtime（启动器自动检查，缺失时从微软官方下载并安装）
+- **不需要 Node.js、npm、npx、yarn 或 pnpm**
+- 使用完整便携包时不需要系统安装 .NET 8 SDK
+
+只有从源码重新编译主程序时，才需要 Windows 10/11 SDK 和 .NET Framework 4.8 Developer Pack；这两个大型开发组件不会静默安装。
 
 ### 构建与启动
 
@@ -66,6 +69,14 @@
 ```
 启动。
 启动文件会自动判断是否需要重新构建，然后打开阅读器；正常使用无需打开终端。
+
+首次启动会执行环境初始化：
+
+1. 检测是否已有 WordReader 实例；有则激活现有窗口并跳过初始化和构建。
+2. 检测 WebView2 Runtime；已安装则立即跳过，缺失时下载带微软签名的官方 Evergreen 安装程序。
+3. 检测 PP-OCRv6 辅助程序与三个模型文件；完整便携包会直接跳过。
+4. 源码目录缺少 OCR 运行时时，自动运行 `build-ocr.ps1`，并将 .NET 8 SDK 下载到项目私有的 `.tools` 目录，不修改系统 PATH。
+5. OCR 初始化失败时仍可启动，并自动使用 Windows OCR 作为兜底。
 
 开发者也可以继续使用 PowerShell：
 
@@ -153,6 +164,7 @@ PS：`/沉浸` 是指单A4页面内部滚动，无法查看上下文；`/滚动`
 ```text
 QuietReader.cs                 主程序源码
 build.ps1 / run.ps1           构建与启动脚本
+initialize.ps1                首次启动依赖检查与按需安装
 build-ocr.ps1                 OCR 运行环境构建脚本
 ocr-helper/                   本地 OCR 辅助程序
 assets/screenshots/           README 实机截图
