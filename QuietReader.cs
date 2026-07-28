@@ -21,6 +21,7 @@ namespace QuietReader
 {
     enum ReaderMode { Account, Line, Hidden }
     enum ReadingViewMode { Immersive, Scrolling }
+    enum CommandPageKind { None, Message, Bookshelf, Discovery, DiscoveryFilter, BookDetail, Catalog, Reading }
     sealed class MainForm : Form
     {
         const string HomeUrl = "https://www.qidian.com/";
@@ -42,7 +43,10 @@ namespace QuietReader
         readonly RichTextBox guideText = new RichTextBox();
         readonly Button guideBackButton = new Button();
         readonly List<BookItem> bookshelf = new List<BookItem>();
+        readonly List<BookItem> discoveryBooks = new List<BookItem>();
+        readonly List<DiscoveryFilterGroup> discoveryFilterGroups = new List<DiscoveryFilterGroup>();
         readonly List<ChapterItem> chapters = new List<ChapterItem>();
+        readonly Stack<NavigationState> navigationHistory = new Stack<NavigationState>();
         readonly List<Form> authenticationWindows = new List<Form>();
         readonly System.Windows.Forms.Timer bookshelfTimer = new System.Windows.Forms.Timer();
         readonly Label[] tabLabels = new Label[10];
@@ -95,6 +99,13 @@ namespace QuietReader
         bool loadingBookshelf;
         bool extractingBookshelf;
         bool openingBook;
+        bool loadingDiscovery;
+        bool extractingDiscovery;
+        bool discoveryFilterRequested;
+        bool discoveryIsRanking;
+        bool loadingBookDetail;
+        bool extractingBookDetail;
+        bool startReadingAfterCatalog;
         bool loadingCatalog;
         bool extractingCatalog;
         bool openingChapter;
@@ -116,6 +127,9 @@ namespace QuietReader
         int bookshelfOperationId;
         int bookshelfNavigationRetries;
         int loginOperationId;
+        int discoveryOperationId;
+        int bookDetailOperationId;
+        int discoveryFilterGroupIndex;
         int catalogOperationId;
         int chapterOperationId;
         int catalogCollectedCount;
@@ -128,8 +142,12 @@ namespace QuietReader
         int styleCardOffset;
         string bookshelfStage = String.Empty;
         string bookshelfNotice = String.Empty;
+        string discoveryTitle = String.Empty;
+        string discoveryUrl = String.Empty;
         string loginCookieSummary = String.Empty;
         BookItem selectedBook;
+        BookDetail currentBookDetail;
+        CommandPageKind currentPageKind = CommandPageKind.None;
         string currentChapterTitle = String.Empty;
         string previousChapterUrl = String.Empty;
         string nextChapterUrl = String.Empty;
@@ -175,6 +193,66 @@ namespace QuietReader
             public string BookUrl { get; set; }
             public string ProgressTitle { get; set; }
             public string ProgressUrl { get; set; }
+            public string Author { get; set; }
+            public string Category { get; set; }
+            public string Status { get; set; }
+            public string Intro { get; set; }
+            public string LatestChapter { get; set; }
+            public string Extra { get; set; }
+        }
+        sealed class BookDetail
+        {
+            public string Title { get; set; }
+            public string BookUrl { get; set; }
+            public string Author { get; set; }
+            public string AuthorUrl { get; set; }
+            public string AuthorInfo { get; set; }
+            public string Intro { get; set; }
+            public string Category { get; set; }
+            public string Status { get; set; }
+            public string WordCount { get; set; }
+            public string TotalRecommendations { get; set; }
+            public string WeeklyRecommendations { get; set; }
+            public string Achievements { get; set; }
+            public string LatestChapter { get; set; }
+            public string LatestUpdate { get; set; }
+            public string CatalogUrl { get; set; }
+            public string ReadUrl { get; set; }
+            public bool InBookshelf { get; set; }
+            public string Error { get; set; }
+        }
+        sealed class DiscoveryProbe
+        {
+            public BookItem[] Items { get; set; }
+            public DiscoveryFilterGroup[] Groups { get; set; }
+            public string PageTitle { get; set; }
+            public string Error { get; set; }
+        }
+        sealed class DiscoveryFilterGroup
+        {
+            public string Title { get; set; }
+            public DiscoveryFilterOption[] Options { get; set; }
+        }
+        sealed class DiscoveryFilterOption
+        {
+            public string Text { get; set; }
+            public string Url { get; set; }
+            public bool Selected { get; set; }
+        }
+        sealed class NavigationState
+        {
+            public CommandPageKind PageKind { get; set; }
+            public List<BookItem> DiscoveryBooks { get; set; }
+            public List<DiscoveryFilterGroup> DiscoveryFilterGroups { get; set; }
+            public List<ChapterItem> Chapters { get; set; }
+            public BookItem SelectedBook { get; set; }
+            public BookDetail BookDetail { get; set; }
+            public string DiscoveryTitle { get; set; }
+            public string DiscoveryUrl { get; set; }
+            public int CurrentChapterIndex { get; set; }
+            public int DiscoveryFilterGroupIndex { get; set; }
+            public bool DiscoveryFilterRequested { get; set; }
+            public bool DiscoveryIsRanking { get; set; }
         }
         sealed class ChapterItem
         {
@@ -495,7 +573,7 @@ namespace QuietReader
             AddRibbonText(fontGroup, "清", 250, 31, 24, 20);
 
             paragraphGroup = AddRibbonGroup(ribbonCommands, 376, 244, "段落");
-            backButton = AddRibbonButton(paragraphGroup, 5, 4, 28, 21, delegate { if (browser.CanGoBack) browser.GoBack(); }, false);
+            backButton = AddRibbonButton(paragraphGroup, 5, 4, 28, 21, delegate { NavigateBack(); }, false);
             forwardButton = AddRibbonButton(paragraphGroup, 34, 4, 28, 21, delegate { if (browser.CanGoForward) browser.GoForward(); }, false);
             refreshButton = AddRibbonButton(paragraphGroup, 63, 4, 28, 21, delegate { if (ready) browser.Reload(); }, false);
             AddRibbonText(paragraphGroup, "• 列表⌄", 94, 4, 48, 21);
@@ -889,8 +967,8 @@ namespace QuietReader
         string[] AvailableCommands()
         {
             return new[] {
-                "/登录", "/书架", "/目录", "/继续", "/下一章", "/上一章", "/订阅", "/文字", "/网页", "/滚动", "/沉浸", "/行数 ", "/字数 ", "/帮助", "/隐藏",
-                "/login", "/bookshelf", "/catalog", "/resume", "/next", "/previous", "/subscribe", "/text", "/web", "/scroll", "/immersive", "/lines ", "/chars ", "/help", "/hide"
+                "/登录", "/书架", "/搜索 ", "/分类", "/排行", "/筛选", "/排序", "/结果", "/详情", "/加入书架", "/阅读", "/目录", "/继续", "/返回", "/下一章", "/上一章", "/订阅", "/文字", "/网页", "/滚动", "/沉浸", "/行数 ", "/字数 ", "/帮助", "/隐藏",
+                "/login", "/bookshelf", "/search ", "/category", "/rank", "/filter", "/sort", "/results", "/detail", "/add", "/read", "/catalog", "/resume", "/back", "/next", "/previous", "/subscribe", "/text", "/web", "/scroll", "/immersive", "/lines ", "/chars ", "/help", "/hide"
             };
         }
         string CurrentCommandHint()
@@ -907,6 +985,8 @@ namespace QuietReader
                 string stage = String.IsNullOrWhiteSpace(catalogStage) ? (chinese ? "正在读取目录" : "Loading catalog") : catalogStage;
                 return stage + (catalogCollectedCount > 0 ? (chinese ? "；已发现 " + catalogCollectedCount + " 章" : "; " + catalogCollectedCount + " chapters found") : String.Empty);
             }
+            if (loadingDiscovery) return chinese ? "正在读取小说列表……" : "Loading book list...";
+            if (loadingBookDetail) return chinese ? "正在读取小说详情……" : "Loading book details...";
             if (subscribingChapter) return chinese ? "正在通过起点官方页面处理本章订阅……" : "Processing this chapter through the official Qidian page...";
             if (openingChapter) return chinese ? "正在打开章节并验证阅读权限……" : "Opening the chapter and checking access...";
             if (!String.IsNullOrWhiteSpace(bookshelfNotice)) return bookshelfNotice;
@@ -922,6 +1002,9 @@ namespace QuietReader
                 if (ocrPrefetching) cache += chinese ? "（后台识别中）" : " (prefetching)";
                 return step + source + cache + (chinese ? "；输入 / 查看阅读命令" : "; type / for reading commands");
             }
+            if (currentPageKind == CommandPageKind.BookDetail) return chinese ? "输入 /阅读、/目录、/加入书架 或 /返回" : "Enter /read, /catalog, /add, or /back";
+            if (currentPageKind == CommandPageKind.DiscoveryFilter) return chinese ? "输入筛选项序号；/结果 查看小说；/返回 回到上一级" : "Enter a filter number; /results shows books; /back returns";
+            if (currentPageKind == CommandPageKind.Discovery) return chinese ? "输入书籍序号查看详情；/返回 回到上一页" : "Enter a book number for details; /back returns";
             if (chapters.Count > 0) return chinese ? "输入章节序号阅读；/继续 按进度阅读；/目录 返回目录" : "Enter a chapter number; /resume uses saved progress; /catalog returns to the catalog";
             if (bookshelf.Count > 0) return chinese ? "输入书籍序号继续；输入 / 查看命令；// 表示换行" : "Enter a book number; type / for commands; // inserts a line break";
             if (loginCompleted) return chinese ? "登录完成，请输入 /书架；输入 / 查看命令；// 表示换行" : "Login complete. Enter /bookshelf; type / for commands";
@@ -1017,12 +1100,16 @@ namespace QuietReader
                 SetCommandHint(CurrentCommandHint());
                 return;
             }
+            bookshelfNotice = String.Empty;
 
             int bookNumber;
             if (Int32.TryParse(input, out bookNumber))
             {
-                if (chapters.Count > 0 && selectedBook != null) OpenChapter(bookNumber);
-                else OpenBook(bookNumber);
+                if (currentPageKind == CommandPageKind.Catalog) OpenChapterWithHistory(bookNumber);
+                else if (currentPageKind == CommandPageKind.DiscoveryFilter) SelectDiscoveryFilter(bookNumber);
+                else if (currentPageKind == CommandPageKind.Discovery) OpenDiscoveryBook(bookNumber);
+                else if (currentPageKind == CommandPageKind.Bookshelf) OpenBook(bookNumber);
+                else ShowCommandError(chinese ? "当前页面没有可选择的序号。" : "The current page has no numbered selection.");
             }
             else if (input == "/登录" || input.Equals("/login", StringComparison.OrdinalIgnoreCase))
             {
@@ -1030,15 +1117,70 @@ namespace QuietReader
             }
             else if (input == "/书架" || input.Equals("/bookshelf", StringComparison.OrdinalIgnoreCase))
             {
+                PushNavigationState();
                 LoadBookshelf();
+            }
+            else if (input.StartsWith("/搜索 ") || input.StartsWith("/search ", StringComparison.OrdinalIgnoreCase))
+            {
+                SearchBooks(CommandArgument(input));
+            }
+            else if (input == "/搜索" || input.Equals("/search", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowCommandError(chinese ? "请输入搜索关键词，例如：/搜索 诡秘之主" : "Enter keywords, for example: /search Lord of Mysteries");
+            }
+            else if (input == "/分类" || input.Equals("/category", StringComparison.OrdinalIgnoreCase))
+            {
+                StartCategoryBrowsing();
+            }
+            else if (input.StartsWith("/分类 ") || input.StartsWith("/category ", StringComparison.OrdinalIgnoreCase))
+            {
+                BrowseCategory(CommandArgument(input));
+            }
+            else if (input == "/排行" || input.Equals("/rank", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowRankingMenu();
+            }
+            else if (input.StartsWith("/排行 ") || input.StartsWith("/rank ", StringComparison.OrdinalIgnoreCase))
+            {
+                BrowseRanking(CommandArgument(input));
+            }
+            else if (input == "/筛选" || input.Equals("/filter", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowNextDiscoveryFilter();
+            }
+            else if (input == "/排序" || input.Equals("/sort", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowDiscoverySort();
+            }
+            else if (input == "/结果" || input.Equals("/results", StringComparison.OrdinalIgnoreCase))
+            {
+                RenderDiscoveryBooks();
+            }
+            else if (input == "/详情" || input.Equals("/detail", StringComparison.OrdinalIgnoreCase))
+            {
+                RenderBookDetail();
+            }
+            else if (input == "/加入书架" || input.Equals("/add", StringComparison.OrdinalIgnoreCase))
+            {
+                AddCurrentBookToBookshelf();
+            }
+            else if (input == "/阅读" || input.Equals("/read", StringComparison.OrdinalIgnoreCase))
+            {
+                BeginCurrentBookReading();
             }
             else if (input == "/目录" || input.Equals("/catalog", StringComparison.OrdinalIgnoreCase))
             {
+                if (currentPageKind != CommandPageKind.Catalog) PushNavigationState();
                 ShowCatalog();
             }
             else if (input == "/继续" || input.Equals("/resume", StringComparison.OrdinalIgnoreCase))
             {
+                PushNavigationState();
                 ResumeReading();
+            }
+            else if (input == "/返回" || input.Equals("/back", StringComparison.OrdinalIgnoreCase))
+            {
+                NavigateBack();
             }
             else if (input == "/下一章" || input.Equals("/next", StringComparison.OrdinalIgnoreCase))
             {
@@ -1089,6 +1231,651 @@ namespace QuietReader
                 decoy.AppendText(Environment.NewLine + input.Replace("//", Environment.NewLine));
             }
             SetCommandHint(CurrentCommandHint());
+        }
+
+        static string CommandArgument(string input)
+        {
+            int separator = input.IndexOf(' ');
+            return separator < 0 ? String.Empty : input.Substring(separator + 1).Trim();
+        }
+
+        void ShowCommandError(string message)
+        {
+            ShowCommandPage();
+            if (currentPageKind == CommandPageKind.None || currentPageKind == CommandPageKind.Message) decoy.Text = message;
+            else decoy.AppendText(Environment.NewLine + Environment.NewLine + message);
+            bookshelfNotice = message;
+            SetCommandHint(CurrentCommandHint());
+        }
+
+        void PushNavigationState()
+        {
+            if (currentPageKind == CommandPageKind.None || loadingBookshelf || loadingCatalog || loadingDiscovery || loadingBookDetail) return;
+            navigationHistory.Push(new NavigationState
+            {
+                PageKind = currentPageKind,
+                DiscoveryBooks = new List<BookItem>(discoveryBooks),
+                DiscoveryFilterGroups = new List<DiscoveryFilterGroup>(discoveryFilterGroups),
+                Chapters = new List<ChapterItem>(chapters),
+                SelectedBook = selectedBook,
+                BookDetail = currentBookDetail,
+                DiscoveryTitle = discoveryTitle,
+                DiscoveryUrl = discoveryUrl,
+                CurrentChapterIndex = currentChapterIndex,
+                DiscoveryFilterGroupIndex = discoveryFilterGroupIndex,
+                DiscoveryFilterRequested = discoveryFilterRequested,
+                DiscoveryIsRanking = discoveryIsRanking
+            });
+        }
+
+        void NavigateBack()
+        {
+            if (guideOverlay.Visible)
+            {
+                HideGuide();
+                return;
+            }
+            if (navigationHistory.Count == 0)
+            {
+                if (ready && browser.CanGoBack) browser.GoBack();
+                else ShowCommandError(chinese ? "已经是最早的页面。" : "This is the earliest page.");
+                return;
+            }
+            CancelPageOperations();
+            NavigationState previous = navigationHistory.Pop();
+            discoveryBooks.Clear();
+            discoveryBooks.AddRange(previous.DiscoveryBooks ?? new List<BookItem>());
+            discoveryFilterGroups.Clear();
+            discoveryFilterGroups.AddRange(previous.DiscoveryFilterGroups ?? new List<DiscoveryFilterGroup>());
+            chapters.Clear();
+            chapters.AddRange(previous.Chapters ?? new List<ChapterItem>());
+            selectedBook = previous.SelectedBook;
+            currentBookDetail = previous.BookDetail;
+            discoveryTitle = previous.DiscoveryTitle ?? String.Empty;
+            discoveryUrl = previous.DiscoveryUrl ?? String.Empty;
+            currentChapterIndex = previous.CurrentChapterIndex;
+            discoveryFilterGroupIndex = previous.DiscoveryFilterGroupIndex;
+            discoveryFilterRequested = previous.DiscoveryFilterRequested;
+            discoveryIsRanking = previous.DiscoveryIsRanking;
+            currentPageKind = previous.PageKind;
+            bookshelfNotice = String.Empty;
+            ShowCommandPage();
+            if (currentPageKind == CommandPageKind.Bookshelf) RenderBookshelf();
+            else if (currentPageKind == CommandPageKind.Discovery) RenderDiscoveryBooks();
+            else if (currentPageKind == CommandPageKind.DiscoveryFilter) RenderDiscoveryFilter();
+            else if (currentPageKind == CommandPageKind.BookDetail) RenderBookDetail();
+            else if (currentPageKind == CommandPageKind.Catalog) RenderCatalog();
+            else
+            {
+                currentPageKind = CommandPageKind.Message;
+                decoy.Text = chinese ? "已返回上一页。" : "Returned to the previous page.";
+            }
+            SetCommandHint(CurrentCommandHint());
+        }
+
+        void CancelPageOperations()
+        {
+            bookshelfOperationId++;
+            catalogOperationId++;
+            discoveryOperationId++;
+            bookDetailOperationId++;
+            chapterOperationId++;
+            ocrOperationId++;
+            loadingBookshelf = false;
+            extractingBookshelf = false;
+            loadingCatalog = false;
+            extractingCatalog = false;
+            loadingDiscovery = false;
+            extractingDiscovery = false;
+            loadingBookDetail = false;
+            extractingBookDetail = false;
+            openingChapter = false;
+            preparingChapter = false;
+            readingActive = false;
+            ocrReadingActive = false;
+            ocrBusy = false;
+            keepBrowserRunningBehindDocument = false;
+            startReadingAfterCatalog = false;
+            bookshelfTimer.Stop();
+        }
+
+        void SearchBooks(string keywords)
+        {
+            if (String.IsNullOrWhiteSpace(keywords))
+            {
+                ShowCommandError(chinese ? "搜索关键词不能为空。" : "Search keywords cannot be empty.");
+                return;
+            }
+            StartDiscovery(chinese ? "搜索：“" + keywords + "”" : "Search: " + keywords,
+                "https://www.qidian.com/soushu/" + Uri.EscapeDataString(keywords) + ".html");
+        }
+
+        void ShowCategoryHelp()
+        {
+            PushNavigationState();
+            CancelPageOperations();
+            ShowCommandPage();
+            currentPageKind = CommandPageKind.Message;
+            decoy.Text = chinese
+                ? "小说分类\n\n直接输入 /分类，程序会读取起点当前页面中的全部筛选层级，并依次显示主分类、子分类、连载状态、作品字数、标签和人气排序等选项。\n\n每一级输入对应序号即可继续；输入 /结果 可随时查看当前小说列表，/筛选 继续选择，/排序 直接进入人气等排序栏，/返回 撤销上一次选择。\n\n仍可使用快捷命令，例如：/分类 玄幻。"
+                : "Book categories\n\nEnter /category to read the current filter levels from Qidian, including primary category, subcategory, status, word count, tags, and popularity ordering.\n\nEnter an option number at each level. /results shows the current books, /filter continues, /sort opens ordering, and /back undoes the last choice. Shortcuts such as /category fantasy remain available.";
+            SetCommandHint(CurrentCommandHint());
+        }
+
+        void StartCategoryBrowsing()
+        {
+            StartDiscovery(chinese ? "小说分类" : "Book categories", "https://www.qidian.com/all/", true, false, 0, true);
+        }
+
+        void ShowRankingMenu()
+        {
+            PushNavigationState();
+            CancelPageOperations();
+            discoveryBooks.Clear();
+            discoveryFilterGroups.Clear();
+            discoveryTitle = chinese ? "排行榜" : "Rankings";
+            discoveryUrl = "https://www.qidian.com/rank/";
+            discoveryFilterRequested = true;
+            discoveryIsRanking = true;
+            discoveryFilterGroupIndex = 0;
+            discoveryFilterGroups.Add(new DiscoveryFilterGroup
+            {
+                Title = chinese ? "榜单类型" : "Ranking type",
+                Options = new[] {
+                    new DiscoveryFilterOption { Text = chinese ? "月票榜" : "Monthly", Url = "https://www.qidian.com/rank/yuepiao/" },
+                    new DiscoveryFilterOption { Text = chinese ? "畅销榜" : "Best sellers", Url = "https://www.qidian.com/rank/hotsales/" },
+                    new DiscoveryFilterOption { Text = chinese ? "阅读榜" : "Reading", Url = "https://www.qidian.com/rank/readindex/" },
+                    new DiscoveryFilterOption { Text = chinese ? "推荐榜" : "Recommendations", Url = "https://www.qidian.com/rank/recom/" },
+                    new DiscoveryFilterOption { Text = chinese ? "收藏榜" : "Collections", Url = "https://www.qidian.com/rank/collect/" },
+                    new DiscoveryFilterOption { Text = chinese ? "更新榜" : "Updates", Url = "https://www.qidian.com/rank/vipup/" },
+                    new DiscoveryFilterOption { Text = chinese ? "新书榜" : "New books", Url = "https://www.qidian.com/rank/newbook/" }
+                }
+            });
+            ShowCommandPage();
+            RenderDiscoveryFilter();
+            SetCommandHint(CurrentCommandHint());
+        }
+
+        void BrowseCategory(string category)
+        {
+            string key = (category ?? String.Empty).Trim().ToLowerInvariant();
+            string channelId = String.Empty;
+            if (key == "玄幻" || key == "fantasy") channelId = "21";
+            else if (key == "奇幻") channelId = "1";
+            else if (key == "武侠" || key == "wuxia") channelId = "2";
+            else if (key == "仙侠" || key == "xianxia") channelId = "22";
+            else if (key == "都市" || key == "urban") channelId = "4";
+            else if (key == "现实" || key == "reality") channelId = "15";
+            else if (key == "军事" || key == "military") channelId = "6";
+            else if (key == "历史" || key == "history") channelId = "5";
+            else if (key == "游戏" || key == "games") channelId = "7";
+            else if (key == "体育" || key == "sports") channelId = "8";
+            else if (key == "科幻" || key == "sci-fi" || key == "scifi") channelId = "9";
+            else if (key == "诸天无限" || key == "诸天") channelId = "20109";
+            else if (key == "悬疑" || key == "suspense") channelId = "10";
+            else if (key == "轻小说" || key == "light novel") channelId = "12";
+            if (String.IsNullOrWhiteSpace(channelId))
+            {
+                ShowCategoryHelp();
+                return;
+            }
+            StartDiscovery((chinese ? "分类：" : "Category: ") + category,
+                "https://www.qidian.com/all/chanId" + channelId + "/", true, false, 1, true);
+        }
+
+        void BrowseRanking(string ranking)
+        {
+            string key = (ranking ?? String.Empty).Trim().ToLowerInvariant();
+            string route = "yuepiao";
+            if (key == "畅销" || key == "hotsales" || key == "sales") route = "hotsales";
+            else if (key == "阅读" || key == "read" || key == "readindex") route = "readindex";
+            else if (key == "推荐" || key == "recommend" || key == "recom") route = "recom";
+            else if (key == "收藏" || key == "collect") route = "collect";
+            else if (key == "更新" || key == "update" || key == "vipup") route = "vipup";
+            else if (key == "新书" || key == "new" || key == "newbook") route = "newbook";
+            else if (!(key == "月票" || key == "monthly" || String.IsNullOrWhiteSpace(key)))
+            {
+                ShowCommandError(chinese ? "支持的榜单：月票、畅销、阅读、推荐、收藏、更新、新书。" : "Supported rankings: monthly, sales, read, recommend, collect, update, new.");
+                return;
+            }
+            StartDiscovery((chinese ? "排行榜：" : "Ranking: ") + ranking,
+                "https://www.qidian.com/rank/" + route + "/", true, true, 0, true);
+        }
+
+        void StartDiscovery(string title, string url, bool requestFilters = false, bool ranking = false, int filterGroupIndex = 0, bool pushHistory = true)
+        {
+            if (!ready || browser.CoreWebView2 == null)
+            {
+                ShowCommandError(chinese ? "浏览器尚未初始化完成。" : "The browser is not ready.");
+                return;
+            }
+            if (pushHistory) PushNavigationState();
+            CancelPageOperations();
+            discoveryOperationId++;
+            loadingDiscovery = true;
+            extractingDiscovery = false;
+            discoveryTitle = title;
+            discoveryUrl = url;
+            discoveryBooks.Clear();
+            discoveryFilterGroups.Clear();
+            discoveryFilterRequested = requestFilters;
+            discoveryIsRanking = ranking;
+            discoveryFilterGroupIndex = Math.Max(0, filterGroupIndex);
+            selectedBook = null;
+            currentBookDetail = null;
+            chapters.Clear();
+            bookshelfNotice = String.Empty;
+            keepBrowserRunningBehindDocument = true;
+            ShowCommandPage();
+            currentPageKind = CommandPageKind.Message;
+            decoy.Text = (chinese ? "正在打开" : "Opening ") + title + "……";
+            SetCommandHint(CurrentCommandHint());
+            Navigate(url);
+        }
+
+        async Task ExtractDiscovery(int operationId)
+        {
+            try
+            {
+                DiscoveryProbe probe = null;
+                for (int attempt = 0; attempt < 16; attempt++)
+                {
+                    if (!loadingDiscovery || operationId != discoveryOperationId) return;
+                    probe = await ReadDiscoveryProbe();
+                    bool hasItems = probe != null && probe.Items != null && probe.Items.Length > 0;
+                    bool hasGroups = probe != null && probe.Groups != null && probe.Groups.Length > 0;
+                    if (hasItems && (!discoveryFilterRequested || hasGroups)) break;
+                    await Task.Delay(500);
+                }
+                if (probe == null || probe.Items == null || probe.Items.Length == 0)
+                {
+                    FailDiscovery(operationId, probe != null && !String.IsNullOrWhiteSpace(probe.Error)
+                        ? probe.Error
+                        : (chinese ? "页面已加载，但没有识别到小说条目。" : "The page loaded, but no books were detected."));
+                    return;
+                }
+                loadingDiscovery = false;
+                extractingDiscovery = false;
+                keepBrowserRunningBehindDocument = false;
+                discoveryBooks.Clear();
+                discoveryBooks.AddRange(probe.Items ?? new BookItem[0]);
+                discoveryFilterGroups.Clear();
+                discoveryFilterGroups.AddRange((probe.Groups ?? new DiscoveryFilterGroup[0]).Where(group => group != null && group.Options != null && group.Options.Length > 1));
+                ShowCommandPage();
+                if (discoveryFilterRequested && discoveryFilterGroupIndex < discoveryFilterGroups.Count) RenderDiscoveryFilter();
+                else RenderDiscoveryBooks();
+                SetCommandHint(CurrentCommandHint());
+            }
+            catch (Exception exception)
+            {
+                FailDiscovery(operationId, exception.GetType().Name + " - " + exception.Message);
+            }
+        }
+
+        async Task<DiscoveryProbe> ReadDiscoveryProbe()
+        {
+            string script = "(function(){try{const clean=x=>(x||'').replace(/\\s+/g,' ').trim();const abs=u=>{try{return new URL(u,location.href).href}catch(e){return ''}};const result=[];const seen=new Set();const allAnchors=Array.from(document.querySelectorAll('a[href]'));" +
+                "const groups=[];const signatures=new Set();const addGroup=(title,nodes)=>{title=clean(title);const options=[];const used=new Set();for(const node of nodes){const text=clean(node.innerText||node.textContent);const url=abs(node.getAttribute('href')||'');if(!text||text.length>40||!url||used.has(text+'|'+url))continue;used.add(text+'|'+url);const cls=String(node.className||'')+' '+String(node.parentElement&&node.parentElement.className||'');options.push({Text:text,Url:url,Selected:/active|selected|current|act/i.test(cls)||node.getAttribute('aria-current')==='page'||url.replace(/[?#].*$/,'').replace(/\\/$/,'')===location.href.replace(/[?#].*$/,'').replace(/\\/$/,'')});}if(options.length<2)return;const signature=options.map(o=>o.Text).join('|');if(signatures.has(signature))return;signatures.add(signature);groups.push({Title:title||'筛选',Options:options.slice(0,80)});};" +
+                "const addByToken=(title,token)=>{const matches=allAnchors.filter(a=>(a.getAttribute('href')||'').indexOf(token)>=0);if(!matches.length)return;const nodes=[];for(const match of matches){const box=match.closest('dl,ul,.select-list,.filter-list,[class*=filter],[class*=sort],[class*=category]');for(const a of Array.from((box||match.parentElement||document).querySelectorAll('a[href]')))nodes.push(a);}addGroup(title,nodes.length?nodes:matches);};" +
+                "if(/\\/all\\//i.test(location.pathname)){addByToken('主分类','chanId');addByToken('子分类','subCateId');addByToken('连载状态','action');addByToken('作品字数','size');addByToken('人气排序','orderId');addByToken('作品标签','tag');}" +
+                "if(/\\/rank\\//i.test(location.pathname)){addByToken('作品分类','chanId');addByToken('子分类','subCateId');addByToken('年份','year');addByToken('月份','month');}" +
+                "for(const dl of Array.from(document.querySelectorAll('dl'))){const titleNode=dl.querySelector('dt,[class*=title],[class*=label]');const title=clean(titleNode&&titleNode.innerText);if(title&&title.length<=24)addGroup(title,Array.from(dl.querySelectorAll('a[href]')));}" +
+                "const sortNodes=allAnchors.filter(a=>/^(人气排序|更新时间|总收藏|总字数|推荐票|月票|会员点击|书友点击)$/.test(clean(a.innerText)));addGroup('人气与排序',sortNodes);" +
+                "const anchors=Array.from(document.querySelectorAll('a[href*=\"/book/\"]'));for(const a of anchors){const href=abs(a.getAttribute('href')||'');const match=href.match(/\\/book\\/(\\d+)(?:\\/|$)/);if(!match||/\\/catalog|\\/chapter\\//i.test(href)||seen.has(match[1]))continue;" +
+                "const box=a.closest('li,article,.book-item,.book-layout,.book-mid-info,.rank-list-row,.book-img-text>ul>li')||a.parentElement;const heading=box&&box.querySelector('h1,h2,h3,h4,[class*=book-name],[class*=book-title]');const title=clean((heading&&heading.innerText)||a.getAttribute('title')||a.innerText);if(!title||title.length>80)continue;" +
+                "const authorLink=box&&box.querySelector('a[href*=\"/author/\"],.author a,a.name');const introNode=box&&box.querySelector('[class*=intro],.intro,p');const categoryNode=box&&box.querySelector('[class*=tag] a,[class*=category],a[href*=\"chanId\"]');const latest=box&&box.querySelector('a[href*=\"/chapter/\"]');const text=clean(box&&box.innerText);" +
+                "seen.add(match[1]);result.push({Title:title,BookUrl:'https://www.qidian.com/book/'+match[1]+'/',ProgressTitle:'',ProgressUrl:'',Author:clean(authorLink&&authorLink.innerText),Category:clean(categoryNode&&categoryNode.innerText),Status:/完本|完结/.test(text)?'完本':(/连载/.test(text)?'连载':''),Intro:clean(introNode&&introNode.innerText).slice(0,260),LatestChapter:clean(latest&&latest.innerText),Extra:text.slice(0,300)});if(result.length>=50)break;}" +
+                "return JSON.stringify({Items:result,Groups:groups,PageTitle:clean(document.title),Error:''});}catch(error){return JSON.stringify({Items:[],Groups:[],PageTitle:'',Error:String(error&&error.stack||error)});}})()";
+            string encoded = await browser.ExecuteScriptAsync(script);
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            string json = serializer.Deserialize<string>(encoded);
+            return String.IsNullOrWhiteSpace(json) ? null : serializer.Deserialize<DiscoveryProbe>(json);
+        }
+
+        void FailDiscovery(int operationId, string reason)
+        {
+            if (!loadingDiscovery || operationId != discoveryOperationId) return;
+            loadingDiscovery = false;
+            extractingDiscovery = false;
+            keepBrowserRunningBehindDocument = false;
+            ShowCommandPage();
+            currentPageKind = CommandPageKind.Message;
+            decoy.Text = (chinese ? "小说列表读取失败\n\n原因：" : "Book list loading failed\n\nReason: ") + reason +
+                (chinese ? "\n\n可输入 /网页 查看官方页面，或 /返回。" : "\n\nUse /web for the official page, or /back.");
+            SetCommandHint(CurrentCommandHint());
+        }
+
+        void RenderDiscoveryBooks()
+        {
+            currentPageKind = CommandPageKind.Discovery;
+            decoy.Text = discoveryTitle + "（" + discoveryBooks.Count + (chinese ? " 本）\n\n" : " books)\n\n");
+            for (int index = 0; index < discoveryBooks.Count; index++)
+            {
+                BookItem book = discoveryBooks[index];
+                string meta = String.Join(" · ", new[] { book.Author, book.Category, book.Status }.Where(value => !String.IsNullOrWhiteSpace(value)).ToArray());
+                decoy.AppendText((index + 1) + ". " + book.Title + (String.IsNullOrWhiteSpace(meta) ? String.Empty : "    " + meta) + Environment.NewLine);
+                if (!String.IsNullOrWhiteSpace(book.Intro)) decoy.AppendText("    " + book.Intro + Environment.NewLine);
+            }
+            decoy.AppendText(chinese ? "\n输入书籍序号查看完整详情。" : "\nEnter a book number to view full details.");
+            if (discoveryFilterGroups.Count > 0)
+            {
+                if (discoveryFilterGroupIndex >= discoveryFilterGroups.Count)
+                    decoy.AppendText(chinese
+                        ? "\n\n已完成当前页面识别到的 " + discoveryFilterGroups.Count + " 级筛选。输入 /筛选 可从第一级重新调整，/排序 可直接调整人气等排序，/返回 可撤销最后一次选择。"
+                        : "\n\nAll " + discoveryFilterGroups.Count + " detected filter levels are complete. /filter revisits the first level, /sort adjusts ordering, and /back undoes the last choice.");
+                else
+                    decoy.AppendText(chinese
+                        ? "\n\n当前页面共识别到 " + discoveryFilterGroups.Count + " 级筛选。输入 /筛选 可继续第 " + (discoveryFilterGroupIndex + 1) + " 级，输入 /排序 可选择人气、收藏、字数、推荐票或月票等排序，输入 /返回 可撤销上一次选择。"
+                        : "\n\n" + discoveryFilterGroups.Count + " filter levels were detected. Use /filter for level " + (discoveryFilterGroupIndex + 1) + ", /sort for popularity-related ordering, or /back to undo the previous choice.");
+            }
+        }
+
+        void RenderDiscoveryFilter()
+        {
+            if (discoveryFilterGroups.Count == 0)
+            {
+                RenderDiscoveryBooks();
+                return;
+            }
+            discoveryFilterGroupIndex = Math.Max(0, Math.Min(discoveryFilterGroupIndex, discoveryFilterGroups.Count - 1));
+            DiscoveryFilterGroup group = discoveryFilterGroups[discoveryFilterGroupIndex];
+            currentPageKind = CommandPageKind.DiscoveryFilter;
+            StringBuilder output = new StringBuilder();
+            output.AppendLine(discoveryTitle);
+            output.AppendLine();
+            output.AppendLine(chinese
+                ? "筛选层级：第 " + (discoveryFilterGroupIndex + 1) + " 级 / 共 " + discoveryFilterGroups.Count + " 级"
+                : "Filter level " + (discoveryFilterGroupIndex + 1) + " of " + discoveryFilterGroups.Count);
+            output.AppendLine((chinese ? "当前选择：" : "Current group: ") + group.Title);
+            output.AppendLine();
+            for (int index = 0; index < group.Options.Length; index++)
+            {
+                DiscoveryFilterOption option = group.Options[index];
+                output.AppendLine((index + 1) + ". " + option.Text + (option.Selected ? (chinese ? "  [当前]" : "  [current]") : String.Empty));
+            }
+            output.AppendLine();
+            output.AppendLine(chinese
+                ? "输入选项序号进入下一级。当前已有 " + discoveryBooks.Count + " 本小说可查看；输入 /结果 可暂时查看列表，/排序 可直接进入人气排序，/返回 可回到上一级。"
+                : "Enter an option number for the next level. " + discoveryBooks.Count + " books are available; /results shows them, /sort opens popularity ordering, and /back returns.");
+            decoy.Text = output.ToString();
+        }
+
+        void SelectDiscoveryFilter(int number)
+        {
+            if (discoveryFilterGroups.Count == 0 || discoveryFilterGroupIndex < 0 || discoveryFilterGroupIndex >= discoveryFilterGroups.Count)
+            {
+                ShowCommandError(chinese ? "当前没有可选择的筛选层级。" : "No filter level is available.");
+                return;
+            }
+            DiscoveryFilterGroup group = discoveryFilterGroups[discoveryFilterGroupIndex];
+            if (number < 1 || number > group.Options.Length)
+            {
+                ShowCommandError(chinese ? "无效的筛选项序号。" : "Invalid filter option number.");
+                return;
+            }
+            DiscoveryFilterOption option = group.Options[number - 1];
+            if (String.IsNullOrWhiteSpace(option.Url))
+            {
+                ShowCommandError(chinese ? "该筛选项没有可用的官方链接。" : "This filter option has no usable official URL.");
+                return;
+            }
+            PushNavigationState();
+            bool rankingType = (group.Title ?? String.Empty).IndexOf("榜单", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                (group.Title ?? String.Empty).IndexOf("Ranking type", StringComparison.OrdinalIgnoreCase) >= 0;
+            int nextGroup = rankingType ? 0 : discoveryFilterGroupIndex + 1;
+            StartDiscovery(discoveryTitle + " > " + option.Text, option.Url, true, discoveryIsRanking, nextGroup, false);
+        }
+
+        void ShowNextDiscoveryFilter()
+        {
+            if (discoveryFilterGroups.Count == 0)
+            {
+                ShowCommandError(chinese ? "当前列表没有识别到更多筛选项。" : "No additional filters were detected for this list.");
+                return;
+            }
+            if (discoveryFilterGroupIndex >= discoveryFilterGroups.Count) discoveryFilterGroupIndex = 0;
+            discoveryFilterRequested = true;
+            ShowCommandPage();
+            RenderDiscoveryFilter();
+            SetCommandHint(CurrentCommandHint());
+        }
+
+        void ShowDiscoverySort()
+        {
+            int sortIndex = -1;
+            for (int index = 0; index < discoveryFilterGroups.Count; index++)
+            {
+                DiscoveryFilterGroup group = discoveryFilterGroups[index];
+                string optionText = String.Join(" ", (group.Options ?? new DiscoveryFilterOption[0]).Select(option => option.Text).ToArray());
+                if ((group.Title ?? String.Empty).IndexOf("排序", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    optionText.IndexOf("人气", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    optionText.IndexOf("总收藏", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    optionText.IndexOf("推荐票", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    optionText.IndexOf("月票", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    sortIndex = index;
+                    break;
+                }
+            }
+            if (sortIndex < 0)
+            {
+                ShowCommandError(chinese ? "当前页面没有识别到独立的人气排序栏。" : "No separate popularity ordering group was detected.");
+                return;
+            }
+            discoveryFilterGroupIndex = sortIndex;
+            discoveryFilterRequested = true;
+            ShowCommandPage();
+            RenderDiscoveryFilter();
+            SetCommandHint(CurrentCommandHint());
+        }
+
+        void OpenDiscoveryBook(int number)
+        {
+            if (number < 1 || number > discoveryBooks.Count)
+            {
+                ShowCommandError(chinese ? "无效的书籍序号。" : "Invalid book number.");
+                return;
+            }
+            PushNavigationState();
+            selectedBook = discoveryBooks[number - 1];
+            LoadBookDetail(selectedBook);
+        }
+
+        void LoadBookDetail(BookItem book)
+        {
+            if (!ready || browser.CoreWebView2 == null || book == null || String.IsNullOrWhiteSpace(book.BookUrl))
+            {
+                ShowCommandError(chinese ? "当前小说没有有效的详情页地址。" : "This book has no valid details URL.");
+                return;
+            }
+            CancelPageOperations();
+            bookDetailOperationId++;
+            loadingBookDetail = true;
+            extractingBookDetail = false;
+            selectedBook = book;
+            currentBookDetail = null;
+            chapters.Clear();
+            currentChapterIndex = -1;
+            bookshelfNotice = String.Empty;
+            keepBrowserRunningBehindDocument = true;
+            ShowCommandPage();
+            currentPageKind = CommandPageKind.Message;
+            decoy.Text = chinese ? "正在读取《" + book.Title + "》的详情……" : "Loading details for " + book.Title + "...";
+            SetCommandHint(CurrentCommandHint());
+            Navigate(book.BookUrl);
+        }
+
+        async Task ExtractBookDetail(int operationId)
+        {
+            try
+            {
+                BookDetail detail = null;
+                for (int attempt = 0; attempt < 16; attempt++)
+                {
+                    if (!loadingBookDetail || operationId != bookDetailOperationId) return;
+                    detail = await ReadBookDetail();
+                    if (detail != null && !String.IsNullOrWhiteSpace(detail.Title)) break;
+                    await Task.Delay(500);
+                }
+                if (detail == null || String.IsNullOrWhiteSpace(detail.Title))
+                {
+                    FailBookDetail(operationId, detail != null && !String.IsNullOrWhiteSpace(detail.Error)
+                        ? detail.Error
+                        : (chinese ? "详情区域没有完成渲染。" : "The details area did not finish rendering."));
+                    return;
+                }
+                loadingBookDetail = false;
+                extractingBookDetail = false;
+                keepBrowserRunningBehindDocument = false;
+                currentBookDetail = detail;
+                selectedBook.Title = detail.Title;
+                selectedBook.BookUrl = detail.BookUrl;
+                selectedBook.Author = detail.Author;
+                selectedBook.Category = detail.Category;
+                selectedBook.Status = detail.Status;
+                selectedBook.Intro = detail.Intro;
+                if (!String.IsNullOrWhiteSpace(detail.CatalogUrl)) currentCatalogUrl = detail.CatalogUrl;
+                ShowCommandPage();
+                RenderBookDetail();
+                SetCommandHint(CurrentCommandHint());
+            }
+            catch (Exception exception)
+            {
+                FailBookDetail(operationId, exception.GetType().Name + " - " + exception.Message);
+            }
+        }
+
+        async Task<BookDetail> ReadBookDetail()
+        {
+            string script = "(function(){try{const clean=x=>(x||'').replace(/\\s+/g,' ').trim();const abs=u=>{try{return new URL(u,location.href).href}catch(e){return ''}};const text=clean(document.body&&document.body.innerText);" +
+                "const pick=s=>{for(const q of s){const e=document.querySelector(q);if(e&&clean(e.innerText||e.textContent))return e}return null};const value=(regex)=>{const m=text.match(regex);return m?clean(m[1]):''};" +
+                "const titleNode=pick(['h1','.book-info h1','.book-information h1','[class*=book-name]']);const authorNode=pick(['a[href*=\"/author/\"]','.writer a','.author a']);const introNode=pick(['#book-intro-detail','.book-intro-detail','#book-intro','.book-intro p','[class*=book-intro] p','[class*=intro]']);" +
+                "const categoryNodes=Array.from(document.querySelectorAll('.tag a,.book-info a[href*=\"chanId\"],a[href*=\"/all/\"]')).filter(e=>clean(e.innerText).length<20).slice(0,4);const statusNode=Array.from(document.querySelectorAll('span,em,i')).find(e=>/连载|完本|完结/.test(clean(e.innerText)));" +
+                "const catalog=Array.from(document.querySelectorAll('a[href*=\"/catalog\"]')).find(e=>e.offsetParent!==null)||document.querySelector('a[href*=\"/catalog\"]');const read=Array.from(document.querySelectorAll('a[href*=\"/chapter/\"]')).find(e=>/阅读|试读|继续|最新章节|开始/.test(clean(e.innerText)))||document.querySelector('a[href*=\"/chapter/\"]');" +
+                "const latest=Array.from(document.querySelectorAll('a[href*=\"/chapter/\"]')).find(e=>/最新/.test(clean((e.parentElement&&e.parentElement.innerText)||e.innerText)))||read;const add=Array.from(document.querySelectorAll('a,button')).find(e=>/加入书架|已在书架|移出书架/.test(clean(e.innerText)));" +
+                "const authorBox=authorNode&&(authorNode.closest('.author-info,.writer,.book-info')||authorNode.parentElement);const achievements=Array.from(document.querySelectorAll('[class*=honor] li,[class*=achievement] li,.book-label li')).map(e=>clean(e.innerText)).filter(Boolean).slice(0,12).join('；');" +
+                "return JSON.stringify({Title:clean(titleNode&&titleNode.innerText),BookUrl:location.origin+location.pathname,Author:clean(authorNode&&authorNode.innerText),AuthorUrl:abs(authorNode&&authorNode.getAttribute('href')),AuthorInfo:clean(authorBox&&authorBox.innerText).slice(0,300),Intro:clean(introNode&&introNode.innerText).slice(0,1600),Category:categoryNodes.map(e=>clean(e.innerText)).join(' · '),Status:clean(statusNode&&statusNode.innerText),WordCount:value(/([\\d.万亿]+)\\s*字/),TotalRecommendations:value(/([\\d.万亿]+)\\s*总推荐/),WeeklyRecommendations:value(/([\\d.万亿]+)\\s*(?:周推荐|本周推荐)/),Achievements:achievements,LatestChapter:clean(latest&&latest.innerText),LatestUpdate:value(/最新更新[：:]?\\s*([^ ]{2,80})/),CatalogUrl:abs(catalog&&catalog.getAttribute('href')),ReadUrl:abs(read&&read.getAttribute('href')),InBookshelf:!!(add&&/已在书架|移出书架/.test(clean(add.innerText))),Error:''});" +
+                "}catch(error){return JSON.stringify({Error:String(error&&error.stack||error)});}})()";
+            string encoded = await browser.ExecuteScriptAsync(script);
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            string json = serializer.Deserialize<string>(encoded);
+            return String.IsNullOrWhiteSpace(json) ? null : serializer.Deserialize<BookDetail>(json);
+        }
+
+        void FailBookDetail(int operationId, string reason)
+        {
+            if (!loadingBookDetail || operationId != bookDetailOperationId) return;
+            loadingBookDetail = false;
+            extractingBookDetail = false;
+            keepBrowserRunningBehindDocument = false;
+            ShowCommandPage();
+            currentPageKind = CommandPageKind.Message;
+            decoy.Text = (chinese ? "小说详情读取失败\n\n原因：" : "Book details loading failed\n\nReason: ") + reason +
+                (chinese ? "\n\n可输入 /网页 查看官方详情页，或 /返回。" : "\n\nUse /web for the official details page, or /back.");
+            SetCommandHint(CurrentCommandHint());
+        }
+
+        void RenderBookDetail()
+        {
+            if (currentBookDetail == null)
+            {
+                ShowCommandError(chinese ? "当前没有已读取的小说详情。" : "No book details are loaded.");
+                return;
+            }
+            currentPageKind = CommandPageKind.BookDetail;
+            BookDetail detail = currentBookDetail;
+            StringBuilder output = new StringBuilder();
+            output.AppendLine("《" + detail.Title + "》");
+            output.AppendLine();
+            AppendDetailLine(output, chinese ? "作者" : "Author", detail.Author);
+            AppendDetailLine(output, chinese ? "作者信息" : "Author info", detail.AuthorInfo);
+            AppendDetailLine(output, chinese ? "分类" : "Category", detail.Category);
+            AppendDetailLine(output, chinese ? "状态" : "Status", detail.Status);
+            AppendDetailLine(output, chinese ? "字数" : "Word count", detail.WordCount);
+            AppendDetailLine(output, chinese ? "总推荐" : "Total recommendations", detail.TotalRecommendations);
+            AppendDetailLine(output, chinese ? "周推荐" : "Weekly recommendations", detail.WeeklyRecommendations);
+            AppendDetailLine(output, chinese ? "最新章节" : "Latest chapter", detail.LatestChapter);
+            AppendDetailLine(output, chinese ? "最近更新" : "Latest update", detail.LatestUpdate);
+            AppendDetailLine(output, chinese ? "作品成绩" : "Achievements", detail.Achievements);
+            AppendDetailLine(output, chinese ? "书架状态" : "Bookshelf", detail.InBookshelf ? (chinese ? "已在书架" : "Added") : (chinese ? "未加入" : "Not added"));
+            output.AppendLine();
+            output.AppendLine(chinese ? "简介" : "Introduction");
+            output.AppendLine(String.IsNullOrWhiteSpace(detail.Intro) ? (chinese ? "暂无可读取简介。" : "No introduction was detected.") : detail.Intro);
+            output.AppendLine();
+            output.AppendLine(chinese ? "可用命令：/加入书架  /目录  /阅读  /返回" : "Commands: /add  /catalog  /read  /back");
+            decoy.Text = output.ToString();
+        }
+
+        static void AppendDetailLine(StringBuilder output, string label, string value)
+        {
+            if (!String.IsNullOrWhiteSpace(value)) output.AppendLine(label + "：" + value);
+        }
+
+        async void AddCurrentBookToBookshelf()
+        {
+            if (currentBookDetail == null || browser.CoreWebView2 == null || browser.Source == null || !IsBookDetailAddress(browser.Source))
+            {
+                ShowCommandError(chinese ? "请先从搜索、分类或排行进入小说详情页。" : "Open a book details page first.");
+                return;
+            }
+            if (currentBookDetail.InBookshelf)
+            {
+                bookshelfNotice = chinese ? "该小说已在书架中。" : "This book is already in your bookshelf.";
+                SetCommandHint(CurrentCommandHint());
+                return;
+            }
+            try
+            {
+                string script = "(function(){const clean=x=>(x||'').replace(/\\s+/g,' ').trim();const target=Array.from(document.querySelectorAll('a,button')).find(e=>e.offsetParent!==null&&/^(加入书架|加书架)$/.test(clean(e.innerText)));if(!target)return 'missing';target.scrollIntoView({block:'center'});target.click();return 'clicked';})()";
+                string encoded = await browser.ExecuteScriptAsync(script);
+                JavaScriptSerializer serializer = new JavaScriptSerializer();
+                string result = serializer.Deserialize<string>(encoded);
+                if (result != "clicked")
+                {
+                    ShowCommandError(chinese ? "未找到官方“加入书架”控件，页面结构可能已变化。可输入 /网页 手动操作。" : "The official Add to bookshelf control was not found. Use /web to add it manually.");
+                    return;
+                }
+                await Task.Delay(1200);
+                if (browser.Source != null && IsLoginAddress(browser.Source))
+                {
+                    bookshelfNotice = chinese ? "请在官方页面登录，完成后再输入 /加入书架。" : "Sign in on the official page, then use /add again.";
+                    SetMode(ReaderMode.Account);
+                }
+                else
+                {
+                    currentBookDetail.InBookshelf = true;
+                    bookshelfNotice = chinese ? "已通过官方页面提交加入书架。" : "The official page accepted the bookshelf request.";
+                    RenderBookDetail();
+                }
+                SetCommandHint(CurrentCommandHint());
+            }
+            catch (Exception exception)
+            {
+                ShowCommandError((chinese ? "加入书架失败：" : "Failed to add to bookshelf: ") + exception.GetType().Name);
+            }
+        }
+
+        void BeginCurrentBookReading()
+        {
+            if (selectedBook == null || currentBookDetail == null)
+            {
+                ShowCommandError(chinese ? "请先打开一本小说的详情。" : "Open a book's details first.");
+                return;
+            }
+            PushNavigationState();
+            if (!String.IsNullOrWhiteSpace(currentBookDetail.ReadUrl))
+            {
+                OpenChapterUrl(currentBookDetail.ReadUrl, 0);
+                return;
+            }
+            startReadingAfterCatalog = true;
+            LoadCatalog();
+        }
+
+        void OpenChapterWithHistory(int number)
+        {
+            PushNavigationState();
+            OpenChapter(number);
         }
 
         void ShowHelp()
@@ -1184,6 +1971,9 @@ namespace QuietReader
             guideText.Text = chinese
                 ? "一、开始使用\n\n1. 点击顶部“登录”，在起点官方页面完成登录。\n2. 输入 /书架，或点击“替换”，读取个人书架。\n3. 输入书籍序号进入目录；输入章节序号打开对应章节。\n4. 输入 /继续，可从书架保存的历史进度继续。\n\n二、阅读与订阅\n\n• /文字：识别当前已授权章节并切换为纯文字阅读。\n• /网页：临时返回起点官方页面。\n• VIP 章节可点击右侧“订阅本章”或输入 /订阅；执行前会显示单章确认。\n• 订阅只使用官方页面和账户余额，不启用自动订阅或自动充值；失败原因显示在顶部。\n• 普通按键用于继续显示正文；章节结束后使用 /下一章。\n\n三、显示速度\n\n• 在“开始”选项卡的字号下拉框中选择数字，表示每次按键显示的字数。\n• 选择“一行”或“两行”，表示每次按键显示对应行数。\n• 也可输入 /字数 100 或 /行数 2。\n\n四、阅读视图\n\n• 沉浸模式：只保留当前阅读区域，适合隐蔽阅读。\n• 滚动模式：已读内容保留在连续 A4 页面中，可向上回看。\n• Ctrl + 鼠标滚轮或右下角缩放条：仅调整纸张和正文缩放。\n• OCR 会预取并缓存邻近页面；状态栏显示当前缓存和识别状态。\n\n五、导航命令\n\n/书架    返回并刷新个人书架\n/目录    返回当前书籍目录\n/下一章  打开下一章\n/上一章  打开上一章\n/订阅    使用账户余额订阅当前单章\n/继续    从记录的进度继续\n/隐藏    返回伪装文档\n/帮助    打开本指引\n\n六、命令输入与快捷键\n\n• 输入 / 显示命令候选；Tab 或鼠标单击可补全。\n• // 表示在普通文本中换行。\n• F8、F9、Ctrl+Alt+Space 可快速返回文档视图。\n• 顶部 EN/中 切换界面语言。\n\n打开本指引不会重新加载章节，也不会修改已经显示的文字、页码、滚动位置或阅读进度。"
                 : "1. Getting started\n\nSign in on the official Qidian page, use /bookshelf, select a book number, then select a chapter number. Use /resume to continue from saved progress.\n\n2. Reading and subscription\n\n/text recognizes the currently authorized chapter. /web returns to the official page. Use Subscribe chapter or /subscribe for one VIP chapter. A confirmation is always shown first; auto-subscribe and automatic recharge stay disabled. Failures appear in the top message area.\n\n3. Reveal speed\n\nChoose a number, One line, or Two lines from the font-size selector. Commands /chars 100 and /lines 2 remain available.\n\n4. Views and zoom\n\nImmersive mode focuses on the current text. Scrolling mode keeps read text on continuous A4 pages. Use Ctrl+mouse wheel or the lower-right zoom slider.\n\n5. Navigation\n\n/bookshelf, /catalog, /next, /previous, /subscribe, /resume, /hide, /help. Type / for suggestions and press Tab or click to complete.\n\nClosing this guide restores the exact previous reading screen without reloading the chapter or resetting text, pages, scroll position, or progress.";
+            guideText.Text = (chinese
+                ? "小说发现命令\n\n/搜索 书名或作者    搜索小说\n/分类               读取全部分类筛选层级\n/排行               先选择榜单，再选择分类或时间层级\n/筛选               继续当前的下一级筛选\n/排序               选择人气、收藏、字数、推荐票或月票等排序\n/结果               随时查看当前小说列表\n\n筛选页面会显示“第几级 / 共几级”。输入选项序号进入下一级；小说列表底部也会提示仍可继续筛选。/返回 可逐级撤销选择。\n\n输入书籍序号打开详情；详情页支持 /加入书架、/阅读 和 /目录。\n\n"
+                : "Book discovery commands\n\n/search keywords searches books. /category reads every available category level. /rank first selects a ranking type, then category or time filters. /filter continues to the next level, /sort opens popularity ordering, and /results shows the current books.\n\nFilter pages show the current and total level count. Enter a number to continue; /back undoes one selection. Enter a book number for details, then use /add, /read, or /catalog.\n\n") + guideText.Text;
         }
 
         void ShowCommandPage()
@@ -1218,8 +2008,11 @@ namespace QuietReader
             PopulateReadingSelectors();
             decoy.Font = CreateDocumentFont();
             if (readingActive && ocrReadingActive) RenderOcrText();
-            else if (chapters.Count > 0 && selectedBook != null) RenderCatalog();
-            else if (bookshelf.Count > 0) RenderBookshelf();
+            else if (currentPageKind == CommandPageKind.BookDetail && currentBookDetail != null) RenderBookDetail();
+            else if (currentPageKind == CommandPageKind.Discovery && discoveryBooks.Count > 0) RenderDiscoveryBooks();
+            else if (currentPageKind == CommandPageKind.DiscoveryFilter && discoveryFilterGroups.Count > 0) RenderDiscoveryFilter();
+            else if (currentPageKind == CommandPageKind.Catalog && chapters.Count > 0 && selectedBook != null) RenderCatalog();
+            else if (currentPageKind == CommandPageKind.Bookshelf && bookshelf.Count > 0) RenderBookshelf();
             else if (loginCompleted)
                 decoy.Text = chinese ? "登录状态已保存。\n\n请输入 /书架 读取个人书库。" : "Login state saved.\n\nEnter /bookshelf to load your library.";
             else
@@ -1519,6 +2312,8 @@ namespace QuietReader
                         ? "书架页面加载失败：" + args.WebErrorStatus
                         : "Bookshelf navigation failed: " + args.WebErrorStatus);
                 }
+                else if (loadingDiscovery) FailDiscovery(discoveryOperationId, (chinese ? "页面加载失败：" : "Page navigation failed: ") + args.WebErrorStatus);
+                else if (loadingBookDetail) FailBookDetail(bookDetailOperationId, (chinese ? "页面加载失败：" : "Page navigation failed: ") + args.WebErrorStatus);
                 return;
             }
             Uri current = browser.Source;
@@ -1532,6 +2327,48 @@ namespace QuietReader
                         : "The login page redirected; verifying the identity cookie for my.qidian.com";
                     SetCommandHint(CurrentCommandHint());
                 }
+            }
+
+            if (loadingDiscovery)
+            {
+                int operationId = discoveryOperationId;
+                if (IsLoginAddress(current))
+                {
+                    FailDiscovery(operationId, chinese ? "页面跳转到了登录页。" : "The page redirected to sign-in.");
+                    return;
+                }
+                if (IsDiscoveryAddress(current))
+                {
+                    if (!extractingDiscovery)
+                    {
+                        extractingDiscovery = true;
+                        await ExtractDiscovery(operationId);
+                    }
+                    return;
+                }
+                FailDiscovery(operationId, chinese ? "小说列表跳转到了无法识别的页面。" : "The book list redirected to an unknown page.");
+                return;
+            }
+
+            if (loadingBookDetail)
+            {
+                int operationId = bookDetailOperationId;
+                if (IsLoginAddress(current))
+                {
+                    FailBookDetail(operationId, chinese ? "详情页跳转到了登录页。" : "The details page redirected to sign-in.");
+                    return;
+                }
+                if (IsBookDetailAddress(current))
+                {
+                    if (!extractingBookDetail)
+                    {
+                        extractingBookDetail = true;
+                        await ExtractBookDetail(operationId);
+                    }
+                    return;
+                }
+                FailBookDetail(operationId, chinese ? "详情请求跳转到了其它页面。" : "The details request redirected elsewhere.");
+                return;
             }
 
             if (loadingBookshelf)
@@ -1675,6 +2512,23 @@ namespace QuietReader
         static bool IsCatalogAddress(Uri address)
         {
             return IsQidianHost(address.Host) && address.AbsolutePath.IndexOf("/catalog", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        static bool IsDiscoveryAddress(Uri address)
+        {
+            if (!IsQidianHost(address.Host)) return false;
+            string path = address.AbsolutePath;
+            return path.IndexOf("/soushu/", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                path.IndexOf("/search", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                path.IndexOf("/all/", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                path.IndexOf("/rank/", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        static bool IsBookDetailAddress(Uri address)
+        {
+            if (!IsQidianHost(address.Host) || IsCatalogAddress(address) || IsChapterAddress(address)) return false;
+            string[] parts = address.AbsolutePath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length >= 2 && String.Equals(parts[0], "book", StringComparison.OrdinalIgnoreCase) && parts[1].All(Char.IsDigit);
         }
 
         static bool IsChapterAddress(Uri address)
@@ -1895,6 +2749,7 @@ namespace QuietReader
 
         void RenderBookshelf()
         {
+            currentPageKind = CommandPageKind.Bookshelf;
             decoy.Text = chinese ? "我的书架\n\n" : "My bookshelf\n\n";
             for (int index = 0; index < bookshelf.Count; index++)
             {
@@ -1912,7 +2767,9 @@ namespace QuietReader
                 decoy.AppendText(chinese ? "\n\n无效的书籍序号。" : "\n\nInvalid book number.");
                 return;
             }
+            PushNavigationState();
             selectedBook = bookshelf[number - 1];
+            currentBookDetail = null;
             chapters.Clear();
             currentChapterIndex = -1;
             currentChapterTitle = String.Empty;
@@ -2145,6 +3002,13 @@ namespace QuietReader
             string progressUrl = !String.IsNullOrWhiteSpace(probe.ProgressUrl) ? probe.ProgressUrl : selectedBook.ProgressUrl;
             currentChapterIndex = FindChapterIndex(progressUrl);
             if (currentChapterIndex < 0 && chapters.Count > 0) currentChapterIndex = 0;
+            if (startReadingAfterCatalog && chapters.Count > 0)
+            {
+                startReadingAfterCatalog = false;
+                OpenChapter(currentChapterIndex + 1);
+                return;
+            }
+            startReadingAfterCatalog = false;
             ShowCommandPage();
             RenderCatalog();
             SetCommandHint(CurrentCommandHint());
@@ -2165,6 +3029,7 @@ namespace QuietReader
 
         void RenderCatalog()
         {
+            currentPageKind = CommandPageKind.Catalog;
             decoy.Text = (chinese ? "《" + selectedBook.Title + "》目录（共 " + chapters.Count + " 章）\n\n" : selectedBook.Title + " - Catalog (" + chapters.Count + " chapters)\n\n");
             for (int index = 0; index < chapters.Count; index++)
             {
@@ -2330,6 +3195,7 @@ namespace QuietReader
                         openingChapter = false;
                         preparingChapter = false;
                         readingActive = true;
+                        currentPageKind = CommandPageKind.Reading;
                         chapterEnded = false;
                         keepBrowserRunningBehindDocument = false;
                         currentChapterTitle = probe.Title ?? String.Empty;
@@ -2547,16 +3413,16 @@ namespace QuietReader
 
         void ShowOfficialReadingView()
         {
-            if (!readingActive || browser.Source == null || !IsChapterAddress(browser.Source))
+            if (browser.Source == null || !IsQidianHost(browser.Source.Host))
             {
-                bookshelfNotice = chinese ? "当前没有可显示的章节页面" : "No chapter page is currently available";
+                bookshelfNotice = chinese ? "当前没有可显示的起点官方页面" : "No official Qidian page is currently available";
                 SetCommandHint(CurrentCommandHint());
                 return;
             }
             ocrOperationId++;
             ocrReadingActive = false;
             ocrBusy = false;
-            SetMode(ReaderMode.Line);
+            SetMode(IsChapterAddress(browser.Source) ? ReaderMode.Line : ReaderMode.Account);
             browser.Focus();
             SetCommandHint(CurrentCommandHint());
         }
