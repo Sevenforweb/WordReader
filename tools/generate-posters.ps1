@@ -135,7 +135,7 @@ try {
         Draw-Text $graphics $featureTitles[$index] (New-Object System.Drawing.Font $fontBold, 25, ([System.Drawing.FontStyle]::Bold)) $ink ([System.Drawing.RectangleF]::new($x + 28, $y + 120, 414, 42))
         Draw-Text $graphics $featureNotes[$index] (New-Object System.Drawing.Font $fontRegular, 19) $muted ([System.Drawing.RectangleF]::new($x + 28, $y + 172, 414, 58))
     }
-    Draw-Text $graphics '正版权限 · 本地识别 · 不保存正文' (New-Object System.Drawing.Font $fontBold, 22, ([System.Drawing.FontStyle]::Bold)) $blue ([System.Drawing.RectangleF]::new(60, 1290, 960, 52)) 'Center'
+    Draw-Text $graphics 'word伪装  正版权限  本地识别' (New-Object System.Drawing.Font $fontBold, 22, ([System.Drawing.FontStyle]::Bold)) $blue ([System.Drawing.RectangleF]::new(60, 1290, 960, 52)) 'Center'
     Save-Poster $bitmap '02-features.png'
 } finally { $graphics.Dispose(); $bitmap.Dispose() }
 
