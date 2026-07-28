@@ -91,7 +91,7 @@ try {
     try { $graphics.FillRectangle($gradient, 0, 0, 1080, 1440) } finally { $gradient.Dispose() }
     Fill-RoundedRectangle $graphics $white ([System.Drawing.RectangleF]::new(72, 64, 76, 76)) 16
     Draw-Text $graphics 'Q' (New-Object System.Drawing.Font $fontBold, 34, ([System.Drawing.FontStyle]::Bold)) $blue ([System.Drawing.RectangleF]::new(72, 64, 76, 76)) 'Center' 'Center'
-    Draw-Text $graphics 'QUIET READER' (New-Object System.Drawing.Font 'Segoe UI', 18, ([System.Drawing.FontStyle]::Bold)) $white ([System.Drawing.RectangleF]::new(170, 72, 500, 34))
+    Draw-Text $graphics 'WORDREADER' (New-Object System.Drawing.Font 'Segoe UI', 18, ([System.Drawing.FontStyle]::Bold)) $white ([System.Drawing.RectangleF]::new(170, 72, 500, 34))
     Draw-Text $graphics '把正版阅读藏进 Word' (New-Object System.Drawing.Font $fontBold, 52, ([System.Drawing.FontStyle]::Bold)) $white ([System.Drawing.RectangleF]::new(72, 185, 936, 90))
     Draw-Text $graphics '登录 · 书架 · 目录 · OCR 文字阅读' (New-Object System.Drawing.Font $fontRegular, 25) $white ([System.Drawing.RectangleF]::new(76, 292, 900, 44))
     $pillText = @('正版账号', '完整目录', '本地 OCR', '双阅读模式')
@@ -108,7 +108,7 @@ try {
     Draw-ImageContain $graphics (Join-Path $screenshots 'main-interface.png') ([System.Drawing.RectangleF]::new(70, 458, 916, 610))
     Draw-Text $graphics '像 Word 一样自然，像阅读器一样完整' (New-Object System.Drawing.Font $fontBold, 30, ([System.Drawing.FontStyle]::Bold)) $white ([System.Drawing.RectangleF]::new(72, 1150, 936, 48)) 'Center'
     Draw-Text $graphics 'Windows · WebView2 · PP-OCRv6' (New-Object System.Drawing.Font 'Segoe UI', 20) $white ([System.Drawing.RectangleF]::new(72, 1220, 936, 40)) 'Center'
-    Draw-Text $graphics 'Quiet Reader' (New-Object System.Drawing.Font 'Segoe UI', 16) $white ([System.Drawing.RectangleF]::new(72, 1340, 936, 30)) 'Center'
+    Draw-Text $graphics 'WordReader' (New-Object System.Drawing.Font 'Segoe UI', 16) $white ([System.Drawing.RectangleF]::new(72, 1340, 936, 30)) 'Center'
     Save-Poster $bitmap '01-overview.png'
 } finally { $graphics.Dispose(); $bitmap.Dispose() }
 

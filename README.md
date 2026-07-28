@@ -1,9 +1,9 @@
-# Quiet Reader
+# WordReader
 
 > 一个面向 Windows 的 Word 风格正版阅读客户端原型。登录、书架、目录、订阅与章节授权均由起点官方页面完成；正文仅对当前已授权、已显示的页面进行本地 OCR 识别。
 
 <p align="center">
-  <img src="assets/posters/01-overview.png" alt="Quiet Reader 总览海报" width="720">
+  <img src="assets/posters/01-overview.png" alt="WordReader 总览海报" width="720">
 </p>
 
 ## 项目特点
@@ -74,7 +74,7 @@
 4. 直接敲击普通按键显示正文；在字号下拉框选择每次显示的字数、一行或两行。
 
 <p align="center">
-  <img src="assets/posters/03-tutorial.png" alt="Quiet Reader 使用教程" width="520">
+  <img src="assets/posters/03-tutorial.png" alt="WordReader 使用教程" width="520">
 </p>
 
 ## 常用命令
