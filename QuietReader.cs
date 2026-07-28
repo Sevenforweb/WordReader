@@ -1213,7 +1213,7 @@ namespace QuietReader
             }
             else if (input == "/书架" || input.Equals("/bookshelf", StringComparison.OrdinalIgnoreCase))
             {
-                PushNavigationState();
+                if (currentPageKind != CommandPageKind.Reading) PushNavigationState();
                 LoadBookshelf();
             }
             else if (input.StartsWith("/搜索 ") || input.StartsWith("/search ", StringComparison.OrdinalIgnoreCase))
@@ -1439,6 +1439,7 @@ namespace QuietReader
             readingActive = false;
             ocrReadingActive = false;
             ocrBusy = false;
+            ocrPrefetching = false;
             keepBrowserRunningBehindDocument = false;
             subscribingChapter = false;
             subscriptionPageActive = false;
@@ -2866,6 +2867,17 @@ namespace QuietReader
 
         async void LoadBookshelf()
         {
+            bool restoreCachedBookshelf = (readingActive || ocrReadingActive || currentPageKind == CommandPageKind.Reading) && bookshelf.Count > 0;
+            CancelPageOperations();
+            if (restoreCachedBookshelf)
+            {
+                bookshelfNotice = String.Empty;
+                currentPageKind = CommandPageKind.Bookshelf;
+                ShowCommandPage();
+                RenderBookshelf();
+                SetCommandHint(CurrentCommandHint());
+                return;
+            }
             if (!ready)
             {
                 SetCommandHint(CurrentCommandHint());
