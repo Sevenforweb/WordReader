@@ -120,6 +120,7 @@ namespace QuietReader
         bool chapterEnded;
         bool ocrReadingActive;
         bool ocrBusy;
+        bool followLatestPending;
         bool ocrPrefetching;
         bool updatingRibbonSelectors;
         bool updatingZoom;
@@ -4131,16 +4132,29 @@ namespace QuietReader
             int contentWidth = Math.Max(120, pageSize.Width - margins.Horizontal);
             int contentHeight = Math.Max(160, pageSize.Height - margins.Vertical);
             List<string> pages = PaginateText(text, font, contentWidth, Math.Max(100, contentHeight - 34), contentHeight);
-            EnsureRenderedPageCount(pages.Count);
-            renderedPageCount = Math.Max(1, pages.Count);
-            for (int index = 0; index < renderedPageEditors.Count; index++)
+            bool pageCountChanged = renderedPageEditors.Count != pages.Count;
+            pagedDocumentHost.SuspendLayout();
+            try
             {
-                RichTextBox editor = renderedPageEditors[index];
-                editor.Font = font;
-                editor.Text = pages[index];
-                editor.SelectionStart = editor.TextLength;
+                EnsureRenderedPageCount(pages.Count);
+                renderedPageCount = Math.Max(1, pages.Count);
+                for (int index = 0; index < renderedPageEditors.Count; index++)
+                {
+                    RichTextBox editor = renderedPageEditors[index];
+                    if (!editor.Font.Equals(font)) editor.Font = font;
+                    if (String.Equals(editor.Text, pages[index], StringComparison.Ordinal)) continue;
+                    editor.Text = pages[index];
+                    editor.SelectionStart = editor.TextLength;
+                }
             }
+            finally { pagedDocumentHost.ResumeLayout(true); }
             ApplyLayout();
+            if (pageCountChanged)
+            {
+                pagedDocumentHost.PerformLayout();
+                pagedDocumentHost.Invalidate(true);
+                pagedDocumentHost.Update();
+            }
             FollowLatestRenderedText();
             UpdateModeStatus();
         }
@@ -4246,27 +4260,36 @@ namespace QuietReader
 
         void FollowLatestRenderedText()
         {
-            if (renderedPagePanels.Count == 0 || renderedPageEditors.Count == 0) return;
+            if (followLatestPending || renderedPagePanels.Count == 0 || renderedPageEditors.Count == 0 || !IsHandleCreated) return;
+            followLatestPending = true;
             BeginInvoke((MethodInvoker)delegate
             {
-                if (!IsPagedReadingView()) return;
-                int index = renderedPagePanels.Count - 1;
-                RichTextBox editor = renderedPageEditors[index];
-                editor.SelectionStart = editor.TextLength;
-                Point caret = editor.GetPositionFromCharIndex(Math.Max(0, editor.TextLength - 1));
-                Point caretInHost = pagedDocumentHost.PointToClient(editor.PointToScreen(caret));
-                int currentScrollY = Math.Max(0, -pagedDocumentHost.AutoScrollPosition.Y);
-                int caretDocumentY = currentScrollY + caretInHost.Y + Math.Max(editor.Font.Height, 1);
-                int visibleTop = currentScrollY;
-                int visibleBottom = visibleTop + pagedDocumentHost.ClientSize.Height;
-                int topComfort = visibleTop + Math.Max(24, pagedDocumentHost.ClientSize.Height / 5);
-                int bottomComfort = visibleBottom - Math.Max(36, pagedDocumentHost.ClientSize.Height / 4);
-                if (caretDocumentY < topComfort || caretDocumentY > bottomComfort)
+                try
                 {
-                    int targetScrollY = Math.Max(0, caretDocumentY - pagedDocumentHost.ClientSize.Height * 3 / 4);
-                    pagedDocumentHost.AutoScrollPosition = new Point(0, targetScrollY);
+                    if (!IsPagedReadingView() || renderedPagePanels.Count == 0 || renderedPageEditors.Count == 0) return;
+                    pagedDocumentHost.PerformLayout();
+                    int index = renderedPagePanels.Count - 1;
+                    Panel panel = renderedPagePanels[index];
+                    RichTextBox editor = renderedPageEditors[index];
+                    panel.PerformLayout();
+                    editor.SelectionStart = editor.TextLength;
+                    Point caret = editor.GetPositionFromCharIndex(Math.Max(0, editor.TextLength - 1));
+                    Point caretInHost = pagedDocumentHost.PointToClient(editor.PointToScreen(caret));
+                    int currentScrollY = Math.Max(0, -pagedDocumentHost.AutoScrollPosition.Y);
+                    int caretDocumentY = currentScrollY + caretInHost.Y + Math.Max(editor.Font.Height, 1);
+                    int visibleTop = currentScrollY;
+                    int visibleBottom = visibleTop + pagedDocumentHost.ClientSize.Height;
+                    int topComfort = visibleTop + Math.Max(24, pagedDocumentHost.ClientSize.Height / 5);
+                    int bottomComfort = visibleBottom - Math.Max(36, pagedDocumentHost.ClientSize.Height / 4);
+                    if (caretDocumentY < topComfort || caretDocumentY > bottomComfort)
+                    {
+                        int targetScrollY = Math.Max(0, caretDocumentY - pagedDocumentHost.ClientSize.Height * 3 / 4);
+                        pagedDocumentHost.AutoScrollPosition = new Point(0, targetScrollY);
+                    }
+                    pagedDocumentHost.Invalidate();
+                    UpdateModeStatus();
                 }
-                UpdateModeStatus();
+                finally { followLatestPending = false; }
             });
         }
         bool HasUnrevealedOcrText()
