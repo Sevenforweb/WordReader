@@ -155,15 +155,13 @@ try {
     Draw-Brand $graphics $blue
     $titleFont = New-Object System.Drawing.Font $fontBold, 52, ([System.Drawing.FontStyle]::Bold)
     $subtitleFont = New-Object System.Drawing.Font $fontRegular, 23
-    $numberFont = New-Object System.Drawing.Font 'Segoe UI', 68, ([System.Drawing.FontStyle]::Bold)
     try {
         Draw-Text $graphics '本地 OCR' $titleFont $ink ([System.Drawing.RectangleF]::new(78, 165, 470, 75))
         Draw-Text $graphics '还原纯文字阅读' $titleFont $blue ([System.Drawing.RectangleF]::new(78, 238, 570, 75))
         Draw-Text $graphics 'PP-OCRv6 Small · Windows OCR 兜底' $subtitleFont $muted ([System.Drawing.RectangleF]::new(82, 337, 580, 46))
         Draw-Text $graphics '仅识别当前已授权页面' $subtitleFont $ink ([System.Drawing.RectangleF]::new(82, 416, 460, 42))
         Draw-Text $graphics '正文只在内存中处理' $subtitleFont $ink ([System.Drawing.RectangleF]::new(82, 468, 460, 42))
-        Draw-Text $graphics '04' $numberFont $softBlue ([System.Drawing.RectangleF]::new(80, 590, 230, 100))
-    } finally { $titleFont.Dispose(); $subtitleFont.Dispose(); $numberFont.Dispose() }
+    } finally { $titleFont.Dispose(); $subtitleFont.Dispose() }
     Draw-Chip $graphics '视口预缓存' 82 548 176 $softBlue $blue
     Draw-Chip $graphics '边界去重' 274 548 150 $softBlue $blue
     Draw-Chip $graphics '自然段合并' 440 548 176 $softBlue $blue
