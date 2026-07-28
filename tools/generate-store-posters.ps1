@@ -141,7 +141,7 @@ try {
     try { Draw-Text $graphics '老板看了以为你在工作！' $highlightFont $ink ([System.Drawing.RectangleF]::new(78, 488, 448, 58)) 'Center' 'Center' } finally { $highlightFont.Dispose() }
     Draw-Chip $graphics '正版书架' 78 588 150 $brightBlue $white
     Draw-Chip $graphics '本地 OCR' 244 588 150 $brightBlue $white
-    Draw-Chip $graphics '双阅读模式' 78 652 176 $brightBlue $white
+    Draw-Chip $graphics '打字显字' 78 652 176 $brightBlue $white
     Draw-Chip $graphics '完整目录' 270 652 150 $brightBlue $white
     Draw-ScreenshotCard $graphics (Join-Path $screenshotDirectory 'main-interface.png') ([System.Drawing.RectangleF]::new(600, 110, 920, 680)) 30
     Save-Poster $bitmap '01-word-like-interface.png'
