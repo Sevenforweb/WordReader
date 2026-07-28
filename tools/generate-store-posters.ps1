@@ -338,10 +338,10 @@ try {
     $gradient = New-Object System.Drawing.Drawing2D.LinearGradientBrush ([System.Drawing.Point]::new(0, 0)), ([System.Drawing.Point]::new($width, 0)), ([System.Drawing.Color]::FromArgb(27, 56, 102)), ([System.Drawing.Color]::FromArgb(46, 94, 164))
     try { $graphics.FillRectangle($gradient, 0, 0, $width, $height) } finally { $gradient.Dispose() }
     Draw-Brand $graphics $white
-    $titleFont = New-Object System.Drawing.Font $fontBold, 49, ([System.Drawing.FontStyle]::Bold)
+    $titleFont = New-Object System.Drawing.Font $fontBold, 43, ([System.Drawing.FontStyle]::Bold)
     $subtitleFont = New-Object System.Drawing.Font $fontRegular, 22
     try {
-        Draw-Text $graphics "VIP 章节`n安全单章订阅" $titleFont $white ([System.Drawing.RectangleF]::new(78, 170, 500, 148))
+        Draw-Text $graphics "VIP 章节`n安全单章订阅" $titleFont $white ([System.Drawing.RectangleF]::new(78, 170, 545, 148))
         Draw-Text $graphics '始终由起点官方页面完成购买' $subtitleFont $white ([System.Drawing.RectangleF]::new(82, 342, 480, 44))
     } finally { $titleFont.Dispose(); $subtitleFont.Dispose() }
     Draw-Chip $graphics '余额支付' 82 438 150 $brightBlue $white
