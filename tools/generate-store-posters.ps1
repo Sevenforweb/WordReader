@@ -127,15 +127,22 @@ try {
     try { $graphics.FillRectangle($gradient, 0, 0, $width, $height) } finally { $gradient.Dispose() }
     Draw-Brand $graphics $white
     $titleFont = New-Object System.Drawing.Font $fontBold, 53, ([System.Drawing.FontStyle]::Bold)
-    $subtitleFont = New-Object System.Drawing.Font $fontRegular, 23
+    $questionFont = New-Object System.Drawing.Font $fontRegular, 25
+    $answerFont = New-Object System.Drawing.Font $fontBold, 29, ([System.Drawing.FontStyle]::Bold)
+    $descriptionFont = New-Object System.Drawing.Font $fontRegular, 23
     try {
-        Draw-Text $graphics "像 Word 一样`n自然" $titleFont $white ([System.Drawing.RectangleF]::new(74, 185, 500, 165))
-        Draw-Text $graphics "熟悉的功能区`nA4 页面与全蓝标题栏" $subtitleFont $white ([System.Drawing.RectangleF]::new(78, 378, 480, 88))
-    } finally { $titleFont.Dispose(); $subtitleFont.Dispose() }
-    Draw-Chip $graphics '办公界面' 78 510 150 $brightBlue $white
-    Draw-Chip $graphics '响应式布局' 244 510 176 $brightBlue $white
-    Draw-Chip $graphics '缩放与多页' 78 574 176 $brightBlue $white
-    Draw-Chip $graphics '中英双语' 270 574 150 $brightBlue $white
+        Draw-Text $graphics '摸鱼神器' $titleFont $white ([System.Drawing.RectangleF]::new(74, 170, 480, 82))
+        Draw-Text $graphics '上班想摸鱼？' $questionFont $white ([System.Drawing.RectangleF]::new(78, 282, 450, 46))
+        Draw-Text $graphics '不如试试 WordReader！' $answerFont $white ([System.Drawing.RectangleF]::new(78, 334, 490, 54))
+        Draw-Text $graphics '像编辑 Word 一样看小说' $descriptionFont $white ([System.Drawing.RectangleF]::new(78, 420, 480, 44))
+    } finally { $titleFont.Dispose(); $questionFont.Dispose(); $answerFont.Dispose(); $descriptionFont.Dispose() }
+    Fill-RoundedRectangle $graphics $orange ([System.Drawing.RectangleF]::new(78, 488, 448, 58)) 18
+    $highlightFont = New-Object System.Drawing.Font $fontBold, 20, ([System.Drawing.FontStyle]::Bold)
+    try { Draw-Text $graphics '老板看了以为你在工作！' $highlightFont $ink ([System.Drawing.RectangleF]::new(78, 488, 448, 58)) 'Center' 'Center' } finally { $highlightFont.Dispose() }
+    Draw-Chip $graphics '正版书架' 78 588 150 $brightBlue $white
+    Draw-Chip $graphics '本地 OCR' 244 588 150 $brightBlue $white
+    Draw-Chip $graphics '双阅读模式' 78 652 176 $brightBlue $white
+    Draw-Chip $graphics '完整目录' 270 652 150 $brightBlue $white
     Draw-ScreenshotCard $graphics (Join-Path $screenshotDirectory 'main-interface.png') ([System.Drawing.RectangleF]::new(600, 110, 920, 680)) 30
     Save-Poster $bitmap '01-word-like-interface.png'
 } finally { $graphics.Dispose(); $bitmap.Dispose() }
