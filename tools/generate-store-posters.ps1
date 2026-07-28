@@ -194,11 +194,11 @@ try {
     $graphics.Clear([System.Drawing.Color]::FromArgb(239, 245, 253))
     Draw-Brand $graphics $blue
     Draw-ScreenshotCard $graphics (Join-Path $screenshotDirectory 'main-interface.png') ([System.Drawing.RectangleF]::new(70, 160, 900, 620)) 28
-    $titleFont = New-Object System.Drawing.Font $fontBold, 45, ([System.Drawing.FontStyle]::Bold)
+    $titleFont = New-Object System.Drawing.Font $fontBold, 36, ([System.Drawing.FontStyle]::Bold)
     $cardTitleFont = New-Object System.Drawing.Font $fontBold, 24, ([System.Drawing.FontStyle]::Bold)
     $cardNoteFont = New-Object System.Drawing.Font $fontRegular, 18
     try {
-        Draw-Text $graphics '长篇阅读，也要顺畅' $titleFont $ink ([System.Drawing.RectangleF]::new(1030, 135, 500, 120))
+        Draw-Text $graphics '长篇阅读，也要顺畅' $titleFont $ink ([System.Drawing.RectangleF]::new(1015, 148, 535, 70))
         $items = @(
             @('完整目录', '聚合分页与章节分组', $blue),
             @('历史进度', '直接继续上次章节', $green),
