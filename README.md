@@ -99,13 +99,7 @@
 - 本项目是个人实验性工具，与 Microsoft、Word、阅文集团或起点中文网无官方关联。
 - 使用前请遵守目标网站服务条款、版权规则以及所在单位的设备使用政策。
 
-## 宣传海报
 
-| 总览 | 特点 | 使用教程 |
-| --- | --- | --- |
-| <img src="assets/posters/01-overview.png" alt="总览海报" width="280"> | <img src="assets/posters/02-features.png" alt="特点海报" width="280"> | <img src="assets/posters/03-tutorial.png" alt="教程海报" width="280"> |
-
-海报由 `tools\generate-posters.ps1` 基于项目实机截图生成，可在修改截图或文案后重复运行。
 
 ## 项目结构
 
