@@ -104,7 +104,7 @@
 也可以不从书架开始：输入 `/搜索 书名或作者`、`/分类` 或 `/排行`。分类与排行榜会显示“当前第几级 / 共几级”，输入选项序号逐级选择；任意阶段可输入 `/结果` 查看小说、`/筛选` 继续下一层、`/排序` 选择人气等排序方式、`/返回` 撤销上一次选择。
 
 <p align="center">
-  <img src="assets/posters/03-tutorial.png" alt="WordReader 使用教程" width="520">
+  <img src="assets/screenshots/code.png" alt="WordReader 使用教程" width="520">
 </p>
 
 ## 常用命令
