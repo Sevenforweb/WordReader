@@ -36,6 +36,7 @@ public static class WordReaderLauncherNativeMethods
 
     $buildInputs = @(
         (Join-Path $projectRoot 'QuietReader.cs'),
+        (Join-Path $projectRoot 'UpdateService.cs'),
         $buildScript
     )
     $needsBuild = -not (Test-Path -LiteralPath $exePath)

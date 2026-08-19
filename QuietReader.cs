@@ -128,6 +128,7 @@ namespace QuietReader
         bool subscribingChapter;
         bool subscriptionAttemptPending;
         bool subscriptionPageActive;
+        bool checkingForUpdates;
         int subscriptionReturnChapterIndex = -1;
         string subscriptionReturnUrl = String.Empty;
         bool guideBrowserWasVisible;
@@ -527,6 +528,7 @@ namespace QuietReader
             base.OnShown(args);
             ApplyLayout();
             LayoutGuideOverlay();
+            CheckForUpdates(false);
             await InitializeBrowser();
             ApplyLayout();
         }
@@ -1063,8 +1065,8 @@ namespace QuietReader
         string[] AvailableCommands()
         {
             return new[] {
-                "/登录", "/书架", "/搜索 ", "/分类", "/排行", "/筛选", "/排序", "/结果", "/详情", "/加入书架", "/阅读", "/目录", "/继续", "/返回", "/下一章", "/上一章", "/订阅", "/文字", "/网页", "/滚动", "/沉浸", "/行数 ", "/字数 ", "/帮助", "/隐藏",
-                "/login", "/bookshelf", "/search ", "/category", "/rank", "/filter", "/sort", "/results", "/detail", "/add", "/read", "/catalog", "/resume", "/back", "/next", "/previous", "/subscribe", "/text", "/web", "/scroll", "/immersive", "/lines ", "/chars ", "/help", "/hide"
+                "/登录", "/书架", "/搜索 ", "/分类", "/排行", "/筛选", "/排序", "/结果", "/详情", "/加入书架", "/阅读", "/目录", "/继续", "/返回", "/下一章", "/上一章", "/订阅", "/文字", "/网页", "/滚动", "/沉浸", "/行数 ", "/字数 ", "/更新", "/帮助", "/隐藏",
+                "/login", "/bookshelf", "/search ", "/category", "/rank", "/filter", "/sort", "/results", "/detail", "/add", "/read", "/catalog", "/resume", "/back", "/next", "/previous", "/subscribe", "/text", "/web", "/scroll", "/immersive", "/lines ", "/chars ", "/update", "/help", "/hide"
             };
         }
         string CurrentCommandHint()
@@ -1319,6 +1321,10 @@ namespace QuietReader
             {
                 ShowCommandPage();
             }
+            else if (input == "/更新" || input.Equals("/update", StringComparison.OrdinalIgnoreCase))
+            {
+                CheckForUpdates(true);
+            }
             else if (input == "/帮助" || input.Equals("/help", StringComparison.OrdinalIgnoreCase) || input == "/")
             {
                 ShowHelp();
@@ -1328,6 +1334,45 @@ namespace QuietReader
                 decoy.AppendText(Environment.NewLine + input.Replace("//", Environment.NewLine));
             }
             SetCommandHint(CurrentCommandHint());
+        }
+
+        async void CheckForUpdates(bool showStatus)
+        {
+            if (checkingForUpdates)
+            {
+                if (showStatus)
+                    MessageBox.Show(this, chinese ? "正在检查更新，请稍候。" : "An update check is already running.",
+                        chinese ? "WordReader 更新" : "WordReader Update", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            checkingForUpdates = true;
+            try
+            {
+                UpdateRelease release = await UpdateService.CheckLatestAsync();
+                if (IsDisposed || Disposing) return;
+                if (release == null)
+                {
+                    if (showStatus)
+                        MessageBox.Show(this,
+                            (chinese ? "当前已是最新版本：" : "WordReader is up to date: ") + UpdateService.CurrentVersion.ToString(3),
+                            chinese ? "WordReader 更新" : "WordReader Update", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                using (UpdatePromptForm prompt = new UpdatePromptForm(release, chinese)) prompt.ShowDialog(this);
+            }
+            catch (Exception error)
+            {
+                if (showStatus && !IsDisposed && !Disposing)
+                    MessageBox.Show(this,
+                        (chinese ? "暂时无法检查更新。\n\n" : "WordReader could not check for updates.\n\n") + error.Message,
+                        chinese ? "WordReader 更新" : "WordReader Update", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                checkingForUpdates = false;
+            }
         }
 
         static string CommandArgument(string input)

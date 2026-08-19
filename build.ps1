@@ -38,7 +38,7 @@ if (-not $windowsMetadata -or -not (Test-Path $windowsRuntime) -or -not (Test-Pa
 
 $facadeReferences = Get-ChildItem $facadeDirectory -Filter *.dll | ForEach-Object { '/reference:' + $_.FullName }
 
-& $compiler /nologo /target:winexe /platform:x64 /out:$exePath /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll /reference:System.Windows.Forms.dll /reference:$windowsRuntime /reference:$windowsMetadata $facadeReferences /reference:$coreDll /reference:$winFormsDll (Join-Path $projectRoot 'QuietReader.cs')
+& $compiler /nologo /target:winexe /platform:x64 /out:$exePath /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Net.Http.dll /reference:System.Web.Extensions.dll /reference:System.Windows.Forms.dll /reference:$windowsRuntime /reference:$windowsMetadata $facadeReferences /reference:$coreDll /reference:$winFormsDll (Join-Path $projectRoot 'QuietReader.cs') (Join-Path $projectRoot 'UpdateService.cs')
 if ($LASTEXITCODE -ne 0) { throw "Compilation failed with exit code $LASTEXITCODE." }
 
 Copy-Item $coreDll $outputDir -Force
